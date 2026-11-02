@@ -3,11 +3,11 @@
 using namespace pqui;
 
 PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
-    : juce::AudioProcessorEditor (p), proc (p), graph (p), band (p), strip (p), smart (p, graph),
+    : juce::AudioProcessorEditor (p), proc (p), graph (p), band (p), strip (p), fx (p), smart (p, graph), mix (p),
       login ([this] { timerCallback(); })
 {
     setLookAndFeel (&lnf);
-    addAndMakeVisible (graph); addAndMakeVisible (band); addAndMakeVisible (strip); addChildComponent (smart);
+    addAndMakeVisible (graph); addAndMakeVisible (band); addAndMakeVisible (strip); addAndMakeVisible (fx); addChildComponent (smart); addChildComponent (mix); addAndMakeVisible (mixBtn);
     for (auto* b : { &presetBtn, &undoBtn, &redoBtn, &abBtn, &logoutBtn }) addAndMakeVisible (b);
     addAndMakeVisible (bypassBtn); addAndMakeVisible (smartBtn); addAndMakeVisible (phaseBox); addAndMakeVisible (phaseLbl);
     if (auto* pc = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter ("phase"))) phaseBox.addItemList (pc->choices, 1);
@@ -19,9 +19,10 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     abBtn.setTooltip ("A/B: alterna entre duas definicoes completas"); abBtn.setButtonText (proc.abSlot() == 0 ? "A" : "B");
     logoutBtn.onClick = [this] { AccessManager::get().logout(); timerCallback(); };
     smartBtn.onClick = [this] { showSmart (smartBtn.getToggleState()); };
+    mixBtn.onClick = [this] { showMix (mixBtn.getToggleState()); };
     graph.onSelect = [this] (int b) { band.bind (b); };
     addChildComponent (login); wasUnlocked = AccessManager::get().isUnlocked(); login.setVisible (! wasUnlocked); lastSel = 0; logoutBtn.setVisible (wasUnlocked && ! AccessManager::inTrial());
-    setResizable (true, true); setResizeLimits (900, 580, 2600, 1600);
+    setResizable (true, true); setResizeLimits (1000, 740, 2600, 1700);
     setSize (proc.uiWidth, proc.uiHeight);
     startTimerHz (30);
 }
@@ -45,13 +46,15 @@ void PrimeqEditor::resized()
     head.removeFromLeft (220);
     presetBtn.setBounds (head.removeFromLeft (170)); head.removeFromLeft (6);
     undoBtn.setBounds (head.removeFromLeft (52)); head.removeFromLeft (4); redoBtn.setBounds (head.removeFromLeft (52)); head.removeFromLeft (6); abBtn.setBounds (head.removeFromLeft (38));
-    logoutBtn.setBounds (head.removeFromRight (54)); head.removeFromRight (6); smartBtn.setBounds (head.removeFromRight (100)); head.removeFromRight (6); bypassBtn.setBounds (head.removeFromRight (84)); head.removeFromRight (10);
+    logoutBtn.setBounds (head.removeFromRight (54)); head.removeFromRight (6); smartBtn.setBounds (head.removeFromRight (100)); head.removeFromRight (6); mixBtn.setBounds (head.removeFromRight (110)); head.removeFromRight (6); bypassBtn.setBounds (head.removeFromRight (84)); head.removeFromRight (10);
     phaseBox.setBounds (head.removeFromRight (150)); phaseLbl.setBounds (head.removeFromRight (40));
     r.removeFromTop (6);
     r.removeFromBottom (14);
+    if (mix.isVisible()) { mix.setBounds (r); login.setBounds (getLocalBounds()); proc.uiWidth = getWidth(); proc.uiHeight = getHeight(); return; }
     strip.setBounds (r.removeFromBottom (70)); r.removeFromBottom (6);
+    fx.setBounds (r.removeFromBottom (92)); r.removeFromBottom (6);
     band.setBounds (r.removeFromBottom (176)); r.removeFromBottom (6);
-    if (smart.isVisible()) { smart.setBounds (r.removeFromRight (260)); r.removeFromRight (6); }
+    if (smart.isVisible()) { smart.setBounds (r.removeFromRight (290)); r.removeFromRight (6); }
     graph.setBounds (r);
     login.setBounds (getLocalBounds());
     proc.uiWidth = getWidth(); proc.uiHeight = getHeight();
@@ -63,7 +66,7 @@ void PrimeqEditor::timerCallback()
     const bool unlocked = AccessManager::get().isUnlocked();
     if (unlocked != wasUnlocked || lastSel < 0) { wasUnlocked = unlocked; login.setVisible (! unlocked); logoutBtn.setVisible (unlocked && ! AccessManager::inTrial()); login.toFront (false); repaint(); lastSel = 0; }
     if (! unlocked) return;
-    graph.tick(); band.refresh(); strip.tick(); smart.tick();
+    graph.tick(); band.refresh(); strip.tick(); fx.tick(); smart.tick(); if (mix.isVisible()) mix.tick();
     undoBtn.setEnabled (proc.undo.canUndo()); redoBtn.setEnabled (proc.undo.canRedo());
 }
 

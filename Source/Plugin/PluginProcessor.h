@@ -12,6 +12,11 @@
 #include <vector>
 #include "../DSP/EqCore.h"
 #include "../DSP/FirDesign.h"
+#include "../DSP/DeHarsh.h"
+#include "../DSP/Character.h"
+#include "../SmartOps/Morph.h"
+#include "../SmartOps/MixAnalysis.h"
+#include "MixRegistry.h"
 #include "../Analysis/AnalyzerEngine.h"
 #include "Access.h"
 
@@ -70,20 +75,37 @@ public:
     juce::StringArray userPresetNames() const;
     bool loadUserPreset (const juce::String& name);
 
-    // ---- Smart Ops
-    int  smartApply (const std::vector<pq::DeresProposal>& p);      // devolve quantas bandas criou
+    // ---- Smart Ops (todas as operacoes: Deresonate, De-Ess, Match, Unmask)
+    int  smartApply (const std::vector<pq::DeresProposal>& p, const char* undoName = "Smart Ops");   // devolve quantas bandas criou
     void smartRevert();
     bool smartCanRevert() const { return ! smartBackup.empty(); }
+    std::vector<double> matchRefDb; juce::String matchRefName;       // referencia carregada (so thread de mensagens)
+
+    // ---- Mix Unmask (registo partilhado entre instancias do mesmo processo)
+    int  mixSlot() const { return mixSlotId; }
+    juce::String trackName() const { return juce::String (pq::MixRegistry::get().name (mixSlotId)); }
+    void setTrackName (const juce::String& n, bool byUser = true);
+    void updateTrackProperties (const TrackProperties&) override;
+    void pollMixMail();
+
+    // ---- Morph entre dois estados de EQ (A e B)
+    void morphCapture (int which);                                  // 0 = A, 1 = B: guarda as 24 bandas atuais
+    void morphClear();
+    bool morphHas (int which) const { const juce::SpinLock::ScopedLockType l (morphLock); return morphSet[which & 1]; }
+    void resetFx();                                                 // De-harsh, Character, lookahead e Morph para o padrao
 
     // ---- telemetria (lock-free)
     pq::AnalyzerEngine analyzer;
     std::array<std::atomic<float>, pq::kNumBands> dynTel {};
     std::atomic<float> meterL { 0.f }, meterR { 0.f }, cpuLoad { 0.f };
     std::atomic<int> listenBand { -1 };
-    int  latencyFor (int phaseIdx) const;
+    std::atomic<float> dhRedDb { 0.f };                              // reducao maxima atual do De-harsh (dB, <= 0)
+    int  latencyFor (int phaseIdx) const;                            // so a parte da fase (compat.)
+    int  declaredLatency() const;                                    // soma de todas as etapas ativas segundo os parametros
+    void updateLatency();
     int  currentLatency() const { return latencySamples.load(); }
     double sampleRateNow() const { return sr; }
-    int  uiWidth = 1180, uiHeight = 720;
+    int  uiWidth = 1240, uiHeight = 860;
 
     // ---- usado pelo trabalhador FIR
     void firDesignTick();
@@ -97,6 +119,23 @@ private:
     struct BandPtrs { std::atomic<float> *on, *type, *freq, *gain, *q, *slope, *place, *dyn, *thr, *range, *ratio, *attack, *hold, *release, *knee, *det, *dir; };
     std::array<BandPtrs, pq::kNumBands> bp {};
     std::atomic<float> *pPhase = nullptr, *pBypass = nullptr, *pOut = nullptr, *pAuto = nullptr, *pDelta = nullptr, *pScExt = nullptr;
+    std::atomic<float> *pLook = nullptr, *pDhOn = nullptr, *pDhAmt = nullptr, *pDhLo = nullptr, *pDhHi = nullptr, *pDhSens = nullptr, *pDhAtk = nullptr, *pDhRel = nullptr, *pDhDelta = nullptr;
+    std::atomic<float> *pChMode = nullptr, *pChDrive = nullptr, *pChMix = nullptr, *pChOs = nullptr, *pMorphOn = nullptr, *pMorph = nullptr;
+
+    // configuracao REALMENTE aplicada ao caminho wet (muda so com fade-out/fade-in) e a sua latencia
+    struct Stage { int look = 0; bool dh = false; int os = 0; int path = 0; bool operator== (const Stage& o) const { return look == o.look && dh == o.dh && os == o.os && path == o.path; } };
+    Stage applied; int procLat = 0;
+    int  lookSamplesFor (int choiceIdx) const;
+    int  stageLatency (const Stage& s) const;
+    void resetChain();
+    void applyMorph (pq::BandParams* io) const;
+    pq::DeHarsh deharsh; pq::Character character;
+    struct MixTimer : juce::Timer { explicit MixTimer (PrimeqProcessor& o) : owner (o) {} void timerCallback() override { owner.pollMixMail(); } PrimeqProcessor& owner; };
+    MixTimer mixTimer { *this }; int mixSlotId = -1; pq::MixMeter mixMeter; bool mixWas = false, nameByUser = false;
+    static constexpr int kLookRing = 1 << 14;
+    std::vector<double> lkL, lkR, uL, uR; int lkW = 0;
+    mutable juce::SpinLock morphLock; pq::BandParams morphA[pq::kNumBands], morphB[pq::kNumBands]; bool morphSet[2] { false, false };
+    std::vector<float> scBuf[2];
 
     pq::EqCore core;
     double sr = 48000.0; int maxBlock = 512;
@@ -117,7 +156,7 @@ private:
     // A/B e Smart Ops
     juce::ValueTree slots[2]; int slot = 0;
     struct Backup { int band; pq::BandParams p; };
-    std::vector<Backup> smartBackup;
+    std::vector<Backup> smartBackup; bool smartScChanged = false; float smartScOld = 0.f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrimeqProcessor)
 };

@@ -190,6 +190,94 @@ int main()
         CHECK (m.index < 0 && ! m.expired, "login: senha errada rejeitada (PBKDF2)");
         CHECK (pq::lic::daysSince2026 (2026, 12, 31) == 364, "licenca: periodo aberto ate 31/12/2026 (dia %d)", pq::lic::daysSince2026 (2026, 12, 31));
     }
+    // 11) lookahead: latencia declarada e real; os detetores reagem ANTES do transiente
+    {
+        auto p = make (fs, bs); setP (*p, "look", 4);   // 5 ms
+        const int expect = (int) std::lround (0.005 * fs); setBandP (*p, 0, "on", 1);
+        std::vector<float> imp (24000, 0.f); imp[3000] = 1.f; auto y = run (*p, imp, bs, 0); y = run (*p, imp, bs, 0);
+        size_t pk = 0; for (size_t i = 0; i < y.size(); ++i) if (std::fabs (y[i]) > std::fabs (y[pk])) pk = i;
+        CHECK (p->currentLatency() == expect && pk == 3000 + (size_t) expect && std::fabs (y[pk] - 1.f) < 0.02f, "lookahead 5 ms: latencia %d (esperado %d), impulso em 3000 sai em %zu", p->currentLatency(), expect, pk);
+        // rajada de 1 kHz (0,5) com banda dinamica de ataque lento: com lookahead o pico no inicio e menor
+        auto burstPeakDb = [&] (int lookIdx)
+        {
+            auto q = make (fs, bs); setP (*q, "look", (float) lookIdx); setBandP (*q, 0, "on", 1); setBandP (*q, 0, "freq", 1000); setBandP (*q, 0, "q", 0.7f); setBandP (*q, 0, "dyn", 1); setBandP (*q, 0, "thr", -30);
+            setBandP (*q, 0, "range", -18); setBandP (*q, 0, "ratio", 20); setBandP (*q, 0, "knee", 0); setBandP (*q, 0, "attack", 3); setBandP (*q, 0, "release", 200);
+            std::vector<float> x (48000, 0.f); for (size_t i = 24000; i < x.size(); ++i) x[i] = 0.5f * (float) std::sin (2 * M_PI * 1000.0 * (double) i / fs);
+            run (*q, std::vector<float> (24000, 0.f), bs); auto z = run (*q, x, bs);
+            const size_t on = 24000 + (size_t) q->currentLatency(); double pkv = 0; for (size_t i = on; i < on + 96; ++i) pkv = std::max (pkv, (double) std::fabs (z[i]));
+            return 20 * std::log10 (std::max (1e-9, pkv));
+        };
+        const double noLook = burstPeakDb (0), withLook = burstPeakDb (4);
+        INFO ("pico nos primeiros 2 ms da rajada: sem lookahead %.1f dBFS | lookahead 5 ms %.1f dBFS", noLook, withLook);
+        CHECK (withLook < noLook - 3.0, "lookahead: reducao ja aplicada no inicio da rajada (%.1f dB menos de pico)", noLook - withLook);
+    }
+    // 12) De-harsh: latencia 2048 declarada e real; wet/dry; transicao sem silencio
+    {
+        auto p = make (fs, bs); setP (*p, "dh_on", 1); setP (*p, "dh_amount", 0.f);
+        CHECK (p->currentLatency() == 2048, "De-harsh: latencia declarada = %d", p->currentLatency());
+        std::mt19937 rng (4); std::normal_distribution<float> nd (0, 0.05f); std::vector<float> n1 (48000); for (auto& v : n1) v = nd (rng);
+        run (*p, n1, bs);
+        std::vector<float> imp (24000, 0.f); imp[3000] = 1.f; auto y = run (*p, imp, bs);
+        size_t pk = 0; for (size_t i = 0; i < y.size(); ++i) if (std::fabs (y[i]) > std::fabs (y[pk])) pk = i;
+        CHECK (pk == 3000 + 2048 && std::fabs (y[pk] - 1.f) < 0.02f, "De-harsh (amount 0): impulso em 3000 sai em %zu (esperado 5048) amp %.3f", pk, y[pk]);
+        // com amount alto e sinal duro: reduz o pico de 5 kHz
+        setP (*p, "dh_amount", 100.f); setP (*p, "dh_sens", 3.f);
+        std::vector<float> h (96000); for (size_t i = 0; i < h.size(); ++i) h[i] = nd (rng) + 0.06f * (float) std::sin (2 * M_PI * 5000.0 * (double) i / fs);
+        run (*p, h, bs); auto yh = run (*p, h, bs);
+        auto tonedb = [&] (const std::vector<float>& v, size_t from, double f) { double re = 0, im = 0; const size_t len = 16384; for (size_t i = 0; i < len; ++i) { const double w = 0.5 - 0.5 * std::cos (2 * M_PI * (double) i / (double) len), ph = 2 * M_PI * f * (double) (from + i) / fs; re += w * v[from + i] * std::cos (ph); im += w * v[from + i] * std::sin (ph); } return 20 * std::log10 (2 * std::sqrt (re * re + im * im) / (len * 0.5) + 1e-12); };
+        const double red = tonedb (yh, 60000, 5000) - tonedb (h, 60000 - 2048, 5000);
+        INFO ("De-harsh no plugin: tom de 5 kHz %.1f dB; telemetria %.1f dB", red, p->dhRedDb.load());
+        CHECK (red < -4.0 && p->dhRedDb.load() < -4.f, "De-harsh: atenua o pico de 5 kHz (%.1f dB) e a telemetria acompanha (%.1f dB)", red, p->dhRedDb.load());
+        setP (*p, "dh_on", 0); CHECK (p->currentLatency() == 0, "De-harsh desligado: latencia volta a %d", p->currentLatency());
+    }
+    // 13) Character: latencia exata (mix 0 = dry atrasado), estabilidade, modos distintos
+    {
+        auto p = make (fs, bs); setP (*p, "ch_mode", 3); setP (*p, "ch_os", 2); setP (*p, "ch_mix", 0.f);
+        CHECK (p->currentLatency() == 36, "Character 4x: latencia declarada = %d (esperado 36)", p->currentLatency());
+        std::vector<float> imp (24000, 0.f); imp[3000] = 1.f; run (*p, imp, bs); auto y = run (*p, imp, bs);
+        size_t pk = 0; for (size_t i = 0; i < y.size(); ++i) if (std::fabs (y[i]) > std::fabs (y[pk])) pk = i;
+        CHECK (pk == 3036 && std::fabs (y[pk] - 1.f) < 0.02f, "Character (mix 0): impulso sai em %zu (esperado 3036) amp %.3f", pk, y[pk]);
+        double rms[4]; for (int m = 0; m < 4; ++m) { auto q = make (fs, bs); setP (*q, "ch_mode", (float) m); setP (*q, "ch_drive", 80.f); setP (*q, "ch_mix", 100.f); auto x = sine (1000, fs, 48000, 0.7f); run (*q, x, bs); auto z = run (*q, x, bs); rms[m] = rmsDb (z, 24000, 48000); CHECK (finite (z), "Character modo %d: saida finita (RMS %.2f dB)", m, rms[m]); }
+        CHECK (std::fabs (rms[1] - rms[2]) > 0.05 || std::fabs (rms[2] - rms[3]) > 0.05, "Character: os modos produzem saidas diferentes (RMS %.2f / %.2f / %.2f dB)", rms[1], rms[2], rms[3]);
+    }
+    // 14) Morph A/B: ganho medido em 0 %, 50 %, 100 %; estado guardado
+    {
+        auto p = make (fs, bs); setBandP (*p, 0, "on", 1); setBandP (*p, 0, "freq", 1000); setBandP (*p, 0, "q", 1); setBandP (*p, 0, "gain", -6);
+        p->morphCapture (0); setBandP (*p, 0, "gain", 6); p->morphCapture (1); setBandP (*p, 0, "gain", 0);
+        CHECK (p->morphHas (0) && p->morphHas (1), "Morph: estados A e B guardados");
+        setP (*p, "morph_on", 1); double g[3]; int i = 0;
+        for (float m : { 0.f, 50.f, 100.f }) { setP (*p, "morph", m); auto x = sine (1000, fs, 48000); run (*p, x, bs); auto z = run (*p, x, bs); g[i++] = rmsDb (z, 24000, 48000) - rmsDb (x, 24000, 48000); }
+        CHECK (std::fabs (g[0] + 6.0) < 0.1 && std::fabs (g[1]) < 0.15 && std::fabs (g[2] - 6.0) < 0.1, "Morph: ganho medido A=%.2f dB | meio=%.2f dB | B=%.2f dB", g[0], g[1], g[2]);
+        juce::MemoryBlock mb; p->getStateInformation (mb); auto q = make (fs, bs); q->setStateInformation (mb.getData(), (int) mb.getSize());
+        setP (*q, "morph", 100.f); auto x = sine (1000, fs, 48000); run (*q, x, bs); auto z = run (*q, x, bs);
+        CHECK (q->morphHas (0) && q->morphHas (1) && std::fabs (rmsDb (z, 24000, 48000) - rmsDb (x, 24000, 48000) - 6.0) < 0.1, "Morph: A/B recuperados do estado do projeto e a funcionar");
+    }
+    // 15) Smart Ops: aplicar propostas dinamicas (De-Ess/Unmask) com sidechain e reverter
+    {
+        auto p = make (fs, bs); pq::DeresProposal a; a.freq = 7000; a.q = 2.5; a.gainDb = -6; a.dynamic = true; a.thrDb = -35; a.ratio = 4; a.attackMs = 1; a.releaseMs = 60;
+        pq::DeresProposal b = a; b.freq = 2000; b.needsSidechain = true;
+        CHECK (p->smartApply ({ a, b }, "teste") == 2, "Smart Ops: 2 bandas dinamicas criadas");
+        const auto n24 = p->getBand (23), n23 = p->getBand (22);
+        CHECK (n24.on && n24.dyn && std::fabs (n24.range + 6) < 0.05 && std::fabs (n24.gain) < 1e-6 && n23.on && n23.dyn && p->getParamReal ("scext") > 0.5f, "Smart Ops: bandas dinamicas (range -6) e sidechain externo ativado");
+        p->smartRevert(); CHECK (! p->getBand (23).on && ! p->getBand (22).on && p->getParamReal ("scext") < 0.5f, "Smart Ops: Revert repoe bandas e sidechain");
+    }
+    // 16) tudo ligado: sem alocacoes na thread de audio e CPU
+    {
+        auto p = make (fs, bs); for (int b = 0; b < pq::kNumBands; ++b) { setBandP (*p, b, "on", 1); setBandP (*p, b, "freq", 60.f * std::pow (1.28f, (float) b)); setBandP (*p, b, "gain", (b % 2) ? 3.f : -3.f); setBandP (*p, b, "dyn", (float) (b % 3 == 0)); setBandP (*p, b, "place", (float) (b % 5)); }
+        setP (*p, "look", 5); setP (*p, "dh_on", 1); setP (*p, "dh_amount", 60.f); setP (*p, "ch_mode", 3); setP (*p, "ch_os", 2); setP (*p, "morph_on", 0); setP (*p, "phase", 0);
+        std::mt19937 rng (5); std::uniform_real_distribution<float> d (-0.3f, 0.3f); juce::AudioBuffer<float> b (2, bs); juce::MidiBuffer midi;
+        auto fill = [&] { for (int c = 0; c < 2; ++c) for (int k = 0; k < bs; ++k) b.setSample (c, k, d (rng)); };
+        for (int i = 0; i < 400; ++i) { fill(); p->processBlock (b, midi); }
+        g_allocs = 0; g_track = true; for (int i = 0; i < 200; ++i) { fill(); p->processBlock (b, midi); } g_track = false;
+        CHECK (g_allocs == 0, "tempo real: lookahead + De-harsh + Character 4x + 24 bandas — 200 blocos sem alocacoes (contagem %ld)", g_allocs);
+        const int blocks = (int) (fs * 10 / bs); const auto t0 = std::chrono::steady_clock::now();
+        for (int i = 0; i < blocks; ++i) { fill(); p->processBlock (b, midi); }
+        const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
+        INFO ("CPU (24 bandas + lookahead 10 ms + De-harsh + Character Warm 4x), 10 s estereo @48k/512 => %.2f s = %.1f %% de 1 nucleo; latencia %d smp", secs, secs * 10, p->currentLatency());
+        CHECK (secs < 10.0, "CPU: tempo real folgado com todos os processadores");
+        setP (*p, "phase", 2); for (int i = 0; i < 300; ++i) { fill(); p->processBlock (b, midi); juce::Thread::sleep (3); }
+        CHECK (p->currentLatency() == 4096 + 480 + 2048 + 36, "latencia total declarada = %d (FIR 4096 + lookahead 480 + De-harsh 2048 + Character 36)", p->currentLatency());
+    }
     // 10) editor: abrir/fechar repetidamente e render PNG do plugin real
     {
         auto p = make (fs, bs);
@@ -200,15 +288,61 @@ int main()
         for (int i = 0; i < 19; ++i) { std::unique_ptr<juce::AudioProcessorEditor> e (p->createEditor()); }
         CHECK (true, "editor: 20 aberturas/fechos repetidos sem crash");
         std::unique_ptr<juce::AudioProcessorEditor> ed (p->createEditor());
-        auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1180, 720); pe->selectBand (1);
+        auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860); pe->selectBand (1);
         for (size_t off = 0; off + 512 <= pink.size(); off += 512) { juce::AudioBuffer<float> b (2, 512); for (int c = 0; c < 2; ++c) std::copy (pink.begin() + (long) off, pink.begin() + (long) off + 512, b.getWritePointer (c)); juce::MidiBuffer m; p->processBlock (b, m); if (off % 4096 == 0) pe->getGraph().tick(); }
         pe->getGraph().tick(); pe->showSmart (true);
         auto img = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f);
         juce::File out ("editor_screenshot.png"); out.deleteFile(); juce::FileOutputStream fo (out); juce::PNGImageFormat().writeImageToStream (img, fo);
-        CHECK (img.getWidth() == 1180 && out.getSize() > 20000, "editor real renderizado para PNG (%dx%d, %lld bytes) — grafico com FFT real e curvas dos coeficientes", img.getWidth(), img.getHeight(), (long long) out.getSize());
+        CHECK (img.getWidth() == 1240 && out.getSize() > 20000, "editor real renderizado para PNG (%dx%d, %lld bytes) — grafico com FFT real e curvas dos coeficientes", img.getWidth(), img.getHeight(), (long long) out.getSize());
         LoginOverlay lo ([] {}); lo.setSize (900, 600); auto li = lo.createComponentSnapshot (lo.getLocalBounds(), true, 1.0f);
         juce::File out2 ("editor_login.png"); out2.deleteFile(); juce::FileOutputStream fo2 (out2); juce::PNGImageFormat().writeImageToStream (li, fo2);
         CHECK (out2.getSize() > 3000, "ecra de login renderizado");
+    }
+    // 17) Mix Unmask ponta-a-ponta: 3 instancias reais (Kick, Bass, Vocals) -> registo -> analise -> aplicar via correio -> imagem
+    {
+        auto pk = make (fs, bs), pb = make (fs, bs), pv = make (fs, bs);
+        pk->setTrackName ("Kick"); pb->setTrackName ("Bass"); pv->setTrackName ("Vocals");
+        auto& reg = pq::MixRegistry::get();
+        CHECK (reg.priority (pk->mixSlot()) == 4 && reg.priority (pb->mixSlot()) == 3 && reg.priority (pv->mixSlot()) == 5, "Mix Unmask: prioridades sugeridas pelo nome (Kick 4, Bass 3, Vocals 5)");
+        for (auto* q : { pk.get(), pb.get(), pv.get() }) reg.setAnalysing (q->mixSlot(), true, fs);
+        std::mt19937 rng (5); std::normal_distribution<float> nd (0, 1.f);
+        const int total = (int) (fs * 12);
+        for (int off = 0; off < total; off += bs)
+        {
+            juce::AudioBuffer<float> bk (2, bs), bb (2, bs), bv (2, bs); juce::MidiBuffer m;
+            for (int i = 0; i < bs; ++i)
+            {
+                const double t = (double) (off + i) / fs; const double ph = std::fmod (t, 0.5);
+                const float kick = ph < 0.09 ? (float) (0.5 * std::exp (-ph * 25.0) * std::sin (2 * M_PI * (95.0 * ph + 50.0 * (1 - std::exp (-ph * 30.0)) / 30.0 * 0 + 50.0 * ph))) : 0.f;
+                const float kick2 = ph < 0.09 ? (float) (0.5 * std::exp (-ph * 25.0) * std::sin (2 * M_PI * 96.0 * ph)) : 0.f; (void) kick;
+                const float bass = (float) (0.28 * std::sin (2 * M_PI * 96.0 * t) + 0.12 * std::sin (2 * M_PI * 130.0 * t));
+                const float vox = (float) ((0.16 + 0.04 * std::sin (2 * M_PI * 3.0 * t)) * (std::sin (2 * M_PI * 400.0 * t) + 0.6 * std::sin (2 * M_PI * 1200.0 * t) + 0.3 * std::sin (2 * M_PI * 2600.0 * t))) + 0.002f * nd (rng);
+                for (int c = 0; c < 2; ++c) { bk.setSample (c, i, kick2); bb.setSample (c, i, bass); bv.setSample (c, i, vox); }
+            }
+            pk->processBlock (bk, m); pb->processBlock (bb, m); pv->processBlock (bv, m);
+        }
+        std::unique_ptr<juce::AudioProcessorEditor> ed (pb->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860);
+        pe->showMix (true); pe->getMix().analyse(); const auto& R = pe->getMix().result();
+        const pq::MixPair* kb = nullptr; for (auto& pr : R.pairs) if (R.curve.size() == 3 && pr.victimIdx >= 0 && ! pr.conflicts.empty() && pr.conflicts[0].freq < 160) { kb = &pr; break; }
+        INFO ("Mix Unmask real: %d pares; %s", (int) R.pairs.size(), R.message.c_str());
+        CHECK (kb != nullptr, "Mix Unmask: conflito de graves detetado entre as instancias reais (kick/bass)");
+        if (kb)
+        {
+            const auto& c = kb->conflicts[0];
+            INFO ("Conflito %.0f Hz: EQ %.0f%% | Dinamica %.0f%% | Sidechain %.0f%% | recomendado %d", c.freq, 100 * c.eq.score, 100 * c.dyn.score, 100 * c.sc.score, (int) c.best);
+            CHECK (c.sc.score >= c.eq.score, "Mix Unmask: kick percussivo vs baixo continuo => sidechain >= EQ estatico");
+            // aplicar o recomendado ao baixo via correio
+            const int vslot = reg.list (nullptr)[0].slot; (void) vslot;
+            pq::MixMail ml; ml.undoName = "Mix Unmask"; ml.props = { c.pSc };
+            const int nb = pb->smartApply (ml.props, "Mix Unmask");
+            CHECK (nb == 1 && pb->getParamReal ("scext") > 0.5f, "Mix Unmask: aplicar sidechain cria 1 banda dinamica e liga sidechain externo (scext)");
+            pb->smartRevert(); CHECK (pb->getParamReal ("scext") < 0.5f, "Mix Unmask: revert repoe o sidechain");
+        }
+        pq::MixMail m1; m1.undoName = "Mix Unmask"; pq::DeresProposal dp; dp.freq = 110; dp.q = 3; dp.gainDb = -3; m1.props = { dp }; reg.post (pb->mixSlot(), m1);
+        pb->pollMixMail(); CHECK (pb->getBand (0).on || pb->getBand (1).on || pb->smartCanRevert(), "Mix Unmask: correio entre instancias aplicado na pista alvo");
+        pe->resized(); auto img = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f);
+        juce::File out ("mix_unmask.png"); out.deleteFile(); juce::FileOutputStream fo (out); juce::PNGImageFormat().writeImageToStream (img, fo);
+        CHECK (out.getSize() > 20000, "pagina Mix Unmask renderizada (%lld bytes)", (long long) out.getSize());
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;

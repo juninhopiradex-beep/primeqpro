@@ -14,7 +14,13 @@
 
 namespace pq
 {
-struct DeresProposal { double freq = 0, gainDb = 0, q = 4, excessDb = 0; };
+// Proposta de banda. Estatica por omissao; 'dynamic' = banda dinamica (gainDb passa a ser o RANGE, o ganho estatico fica 0).
+struct DeresProposal
+{
+    double freq = 0, gainDb = 0, q = 4, excessDb = 0;
+    bool dynamic = false, needsSidechain = false;
+    double thrDb = -30, ratio = 2, attackMs = 10, releaseMs = 100;
+};
 
 class Deresonate
 {
@@ -29,6 +35,9 @@ public:
         ++frames; hopSeconds += secondsCovered;
     }
     double learnedSeconds() const { return hopSeconds; }
+    // espectro medio de potencia (amplitude^2 por bin) — usado tambem pelo Reference Match
+    std::vector<double> meanPower() const { std::vector<double> m (acc); if (frames > 0) for (auto& v : m) v /= frames; return m; }
+    int numBins() const { return bins; } double sampleRate() const { return fs; }
     int frameCount() const { return frames; }
     bool ready() const { return frames >= 4 && hopSeconds >= 2.0; }
 

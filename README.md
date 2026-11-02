@@ -3,6 +3,7 @@
 EQ profissional paramétrico + dinâmico (Beatfreak Music · Plugins by Piradex). C++20 / JUCE 8.
 
 ![Editor](Docs/screenshots/editor_screenshot.png)
+![Mix Unmask](Docs/screenshots/mix_unmask.png)
 
 ## Características (resumo — ver [Docs/FEATURES.md](Docs/FEATURES.md) para o estado real)
 - 24 bandas, 8 tipos de filtro, declives 6–96 dB/oct + Brickwall finito.

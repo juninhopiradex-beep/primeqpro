@@ -4,6 +4,16 @@
 #include "../../Source/DSP/FirDesign.h"
 #include "../../Source/Analysis/SpectrumCalc.h"
 #include "../../Source/SmartOps/Deresonate.h"
+#include "../../Source/SmartOps/DeEss.h"
+#include "../../Source/SmartOps/Unmask.h"
+#include "../../Source/SmartOps/ReferenceMatch.h"
+#include "../../Source/SmartOps/Morph.h"
+#include "../../Source/DSP/Oversampler.h"
+#include "../../Source/DSP/Character.h"
+#include "../../Source/DSP/DeHarsh.h"
+#include "../../Source/DSP/MixMeter.h"
+#include "../../Source/Plugin/MixRegistry.h"
+#include "../../Source/SmartOps/MixAnalysis.h"
 #include "../../Source/Shared/Units.h"
 #include <chrono>
 #include <cstdio>
@@ -225,6 +235,211 @@ int main()
         CHECK (std::fabs (parseFreq ("a4", 0) - 440) < 1e-6 && std::fabs (parseFreq ("c#3", 0) - 138.5913) < 1e-3 && std::fabs (parseFreq ("eb2", 0) - 77.7817) < 1e-3, "unidades: notas a4=440, c#3=138.59, eb2=77.78");
         CHECK (std::fabs (parseDb ("-3,5 dB", 0) + 3.5) < 1e-9 && std::fabs (parseMs ("0,5 s", 0) - 500) < 1e-9 && std::fabs (parseMs ("12 ms", 0) - 12) < 1e-9 && std::fabs (parsePlain ("4:1", 0) - 4) < 1e-9, "unidades: -3,5 dB / 0,5 s / 12 ms / 4:1");
         CHECK (parseFreq ("lixo", 123) == 123 && formatFreq (1250) == "1.25 kHz" && formatFreq (440) == "440 Hz", "unidades: entrada invalida mantem o valor; formatacao");
+    }
+    // ======================================================================= v1.1: novos modulos
+    // 13) Sobreamostragem: latencia inteira exata e resposta plana
+    {
+        for (int f : { 2, 4 })
+        {
+            Oversampler os; os.prepare (f); std::vector<double> x (2048, 0.0); x[300] = 1.0;
+            os.process (x.data(), 2048, [] (double v) { return v; });
+            int pk = 0; for (int i = 0; i < 2048; ++i) if (std::fabs (x[(size_t) i]) > std::fabs (x[(size_t) pk])) pk = i;
+            CHECK (pk - 300 == Oversampler::latencyFor (f) && x[(size_t) pk] > 0.5, "Oversampler %dx: impulso sai com atraso %d (esperado %d), amplitude %.4f", f, pk - 300, Oversampler::latencyFor (f), x[(size_t) pk]);
+        }
+        Oversampler os; os.prepare (2); double worst = 0;
+        for (double f : { 100.0, 1000.0, 8000.0, 15000.0 })
+        {
+            os.reset(); std::vector<double> y (16384); for (size_t i = 0; i < y.size(); ++i) y[i] = 0.5 * std::sin (2 * M_PI * f * (double) i / FS);
+            os.process (y.data(), 16384, [] (double v) { return v; });
+            std::vector<double> t (y.begin() + 4096, y.end()); double s = 0; for (double v : t) s += v * v; worst = std::max (worst, std::fabs (10 * std::log10 (s / t.size() / 0.125)));
+        }
+        CHECK (worst < 0.05, "Oversampler 2x: resposta plana ate 15 kHz (desvio max %.3f dB)", worst);
+    }
+    // 14) Character: modos mensuravelmente distintos, aliasing, DC, bypass de dry, ganho de pequeno sinal
+    {
+        auto harm = [&] (CharMode m, double drive, int os, double f0, double amp, double* h2, double* h3, double* thd, double* dc)
+        {
+            Character c; c.prepare (FS); c.setup (m, drive, 1.0, os); c.reset();
+            const int n = 48000; std::vector<double> L (n), R (n);
+            for (int i = 0; i < n; ++i) L[(size_t) i] = R[(size_t) i] = amp * std::sin (2 * M_PI * f0 * i / FS);
+            for (int off = 0; off < n; off += 256) c.process (L.data() + off, R.data() + off, std::min (256, n - off));
+            const int s0 = 24000, len = 16384; // multiplo exato do periodo nao e necessario: usa DFT por correlacao
+            auto mag = [&] (double f) { double re = 0, im = 0; for (int i = 0; i < len; ++i) { const double w = 0.5 - 0.5 * std::cos (2 * M_PI * i / len), p = 2 * M_PI * f * (s0 + i) / FS; re += w * L[(size_t) (s0 + i)] * std::cos (p); im += w * L[(size_t) (s0 + i)] * std::sin (p); } return 2.0 * std::sqrt (re * re + im * im) / (len * 0.5); };
+            const double a1 = mag (f0); *h2 = 20 * std::log10 (mag (2 * f0) / a1 + 1e-12); *h3 = 20 * std::log10 (mag (3 * f0) / a1 + 1e-12);
+            double q = 0; for (int k = 2; k <= 8; ++k) { const double m = mag (k * f0); q += m * m; } *thd = 100.0 * std::sqrt (q) / a1;
+            double s = 0; for (int i = 0; i < len; ++i) s += L[(size_t) (s0 + i)]; *dc = s / len;
+        };
+        double h2c, h3c, tc, dcc, h2s, h3s, ts, dcs, h2w, h3w, tw, dcw;
+        harm (CharMode::Clean, 0.6, 2, 1000, 0.5, &h2c, &h3c, &tc, &dcc);
+        harm (CharMode::Subtle, 0.6, 2, 1000, 0.5, &h2s, &h3s, &ts, &dcs);
+        harm (CharMode::Warm, 0.6, 2, 1000, 0.5, &h2w, &h3w, &tw, &dcw);
+        std::printf ("INFO    Character @1k, -6 dBFS, drive 60%%: Clean H2 %.1f H3 %.1f THD %.2f%% | Subtle H2 %.1f H3 %.1f THD %.2f%% | Warm H2 %.1f H3 %.1f THD %.2f%%\n", h2c, h3c, tc, h2s, h3s, ts, h2w, h3w, tw);
+        CHECK (h3c > h2c + 25.0, "Character Clean: so impares (H3 %.1f dB >> H2 %.1f dB)", h3c, h2c);
+        CHECK (h2s > h2c + 25.0 && h2s > -60.0, "Character Subtle: 2a harmonica presente (%.1f dB) vs Clean (%.1f dB)", h2s, h2c);
+        CHECK (tw > ts && ts > tc, "Character: THD cresce Clean (%.2f%%) < Subtle (%.2f%%) < Warm (%.2f%%)", tc, ts, tw);
+        CHECK (std::fabs (dcs) < 2e-3 && std::fabs (dcw) < 2e-3, "Character: DC removido (Subtle %.5f, Warm %.5f)", dcs, dcw);
+        // aliasing: seno 15 kHz com drive alto; harmonica 3 (45 kHz) dobra para 3 kHz
+        double a1x, a2x, a4x, dummy;
+        auto aliasDb = [&] (int os)
+        {
+            Character c; c.prepare (FS); c.setup (CharMode::Clean, 1.0, 1.0, os); c.reset(); const int n = 48000; std::vector<double> L (n), R (n);
+            for (int i = 0; i < n; ++i) L[(size_t) i] = R[(size_t) i] = 0.9 * std::sin (2 * M_PI * 15000.0 * i / FS);
+            for (int off = 0; off < n; off += 256) c.process (L.data() + off, R.data() + off, std::min (256, n - off));
+            const int s0 = 24000, len = 16384; auto mag = [&] (double f) { double re = 0, im = 0; for (int i = 0; i < len; ++i) { const double w = 0.5 - 0.5 * std::cos (2 * M_PI * i / len), p = 2 * M_PI * f * (s0 + i) / FS; re += w * L[(size_t) (s0 + i)] * std::cos (p); im += w * L[(size_t) (s0 + i)] * std::sin (p); } return 2.0 * std::sqrt (re * re + im * im) / (len * 0.5); };
+            return 20 * std::log10 (mag (3000.0) / mag (15000.0) + 1e-12);
+        };
+        a1x = aliasDb (1); a2x = aliasDb (2); a4x = aliasDb (4); (void) dummy;
+        std::printf ("INFO    Aliasing (15 kHz, drive 100%%, alias a 3 kHz re: fundamental): 1x %.1f dB | 2x %.1f dB | 4x %.1f dB\n", a1x, a2x, a4x);
+        CHECK (a2x < a1x - 15.0 && a4x < a2x + 1.0, "Character: sobreamostragem reduz o aliasing (1x %.1f, 2x %.1f, 4x %.1f dB)", a1x, a2x, a4x);
+        // pequeno sinal ~ unitario, mix 0 = dry atrasado exato
+        {
+            Character c; c.prepare (FS); c.setup (CharMode::Clean, 0.5, 1.0, 2); c.reset(); const int n = 24000; std::vector<double> L (n), R (n);
+            for (int i = 0; i < n; ++i) L[(size_t) i] = R[(size_t) i] = 0.001 * std::sin (2 * M_PI * 1000.0 * i / FS);
+            for (int off = 0; off < n; off += 256) c.process (L.data() + off, R.data() + off, std::min (256, n - off));
+            double s = 0; for (int i = 12000; i < n; ++i) s += L[(size_t) i] * L[(size_t) i]; const double g = 10 * std::log10 (s / (n - 12000) / (0.5e-6));
+            CHECK (std::fabs (g) < 0.1, "Character: ganho de pequeno sinal = %.3f dB (esperado 0)", g);
+            Character d; d.prepare (FS); d.setup (CharMode::Warm, 1.0, 0.0, 4); d.reset(); std::vector<double> x (4096, 0.0), y (4096, 0.0); x[100] = 1.0; y = x;
+            d.process (x.data(), y.data(), 4096); int pk = 0; for (int i = 0; i < 4096; ++i) if (std::fabs (x[(size_t) i]) > std::fabs (x[(size_t) pk])) pk = i;
+            CHECK (pk == 100 + d.latency() && std::fabs (x[(size_t) pk] - 1.0) < 1e-9, "Character: mix 0%% = dry atrasado %d amostras exatas", d.latency());
+        }
+    }
+    // 15) De-harsh: reconstrucao perfeita, latencia exata, atenuacao seletiva, delta, estabilidade
+    {
+        DeHarsh dh; dh.prepare (FS); DeHarshParams p; p.amount = 0; dh.setParams (p);
+        std::mt19937 rng (7); std::normal_distribution<double> nd (0.0, 0.1);
+        const int n = 48000; std::vector<double> L (n), R (n), L0, R0; for (int i = 0; i < n; ++i) { L[(size_t) i] = nd (rng); R[(size_t) i] = nd (rng); } L0 = L; R0 = R;
+        for (int off = 0; off < n; off += 480) dh.process (L.data() + off, R.data() + off, std::min (480, n - off));
+        double err = 0; for (int i = DeHarsh::kLatency + 2048; i < n; ++i) err = std::max (err, std::fabs (L[(size_t) i] - L0[(size_t) (i - DeHarsh::kLatency)]));
+        CHECK (err < 1e-9, "De-harsh: reconstrucao STFT perfeita com ganho 1 (erro max %.2e) e latencia exata %d", err, DeHarsh::kLatency);
+        // seletividade: ruido + seno 5 kHz forte
+        DeHarsh d2; d2.prepare (FS); p.amount = 1.0; p.sensDb = 4; p.loHz = 2500; p.hiHz = 10000; d2.setParams (p);
+        const int m = 96000; std::vector<double> a (m), b (m), a0; std::normal_distribution<double> nd2 (0.0, 0.05);
+        for (int i = 0; i < m; ++i) { const double t = i / FS; const double s = 0.05 * std::sin (2 * M_PI * 5000.0 * t) + 0.05 * std::sin (2 * M_PI * 300.0 * t); a[(size_t) i] = nd2 (rng) + s; b[(size_t) i] = a[(size_t) i]; }
+        a0 = a; for (int off = 0; off < m; off += 512) d2.process (a.data() + off, b.data() + off, std::min (512, m - off));
+        auto tone = [&] (const std::vector<double>& x, int shift, double f) { const int s0 = 48000, len = 16384; double re = 0, im = 0; for (int i = 0; i < len; ++i) { const double w = 0.5 - 0.5 * std::cos (2 * M_PI * i / len), ph = 2 * M_PI * f * (s0 + i) / FS; re += w * x[(size_t) (s0 + i + shift)] * std::cos (ph); im += w * x[(size_t) (s0 + i + shift)] * std::sin (ph); } return 20 * std::log10 (2.0 * std::sqrt (re * re + im * im) / (len * 0.5) + 1e-12); };
+        const double red5k = tone (a, 0, 5000.0) - tone (a0, -DeHarsh::kLatency, 5000.0), red300 = tone (a, 0, 300.0) - tone (a0, -DeHarsh::kLatency, 300.0);
+        std::printf ("INFO    De-harsh: pico 5 kHz %.1f dB, tom 300 Hz (fora da zona) %.2f dB, reducao maxima reportada %.1f dB\n", red5k, red300, d2.lastMaxReductionDb());
+        CHECK (red5k < -4.0 && std::fabs (red300) < 0.2, "De-harsh: reduz o pico de 5 kHz (%.1f dB) e deixa os 300 Hz intactos (%.2f dB)", red5k, red300);
+        // delta: entrada atrasada = saida wet + delta
+        DeHarsh w1, w2; w1.prepare (FS); w2.prepare (FS); p.delta = false; w1.setParams (p); DeHarshParams pd = p; pd.delta = true; w2.setParams (pd);
+        std::vector<double> x1 (m), y1, x2, y2; x1 = a0; y1 = a0; x2 = a0; y2 = a0;
+        for (int off = 0; off < m; off += 512) { const int mm = std::min (512, m - off); w1.process (x1.data() + off, y1.data() + off, mm); w2.process (x2.data() + off, y2.data() + off, mm); }
+        double de = 0; for (int i = 4096; i < m; ++i) de = std::max (de, std::fabs ((x1[(size_t) i] + x2[(size_t) i]) - a0[(size_t) (i - DeHarsh::kLatency)]));
+        CHECK (de < 1e-9, "De-harsh: wet + delta = entrada atrasada (erro %.2e)", de);
+        bool finite = true; for (double v : a) if (! std::isfinite (v)) finite = false;
+        CHECK (finite, "De-harsh: saida finita");
+    }
+    // 16) LevelBank / De-Ess / Unmask
+    {
+        std::mt19937 rng (11); std::normal_distribution<double> nd (0.0, 1.0);
+        // sinal de voz sintetico: ruido de baixa frequencia constante + rajadas de ruido em 7 kHz
+        const int n = (int) (FS * 12); std::vector<float> x ((size_t) n);
+        Coefs lp = biquadRBJ (BandType::LowPass, FS, 1500, 0, 0.707), bp = biquadRBJ (BandType::BandPass, FS, 7000, 0, 2.5); BiquadState s1, s2;
+        for (int i = 0; i < n; ++i)
+        {
+            const double t = (double) i / FS; const bool burst = std::fmod (t, 0.5) < 0.08;
+            x[(size_t) i] = (float) (0.1 * tick (lp, s1, nd (rng)) + (burst ? 0.5 * tick (bp, s2, nd (rng)) : 0.01 * tick (bp, s2, nd (rng))));
+        }
+        DeEss de; de.begin (FS); for (int off = 0; off < n; off += 4096) de.feed (x.data() + off, std::min (4096, n - off));
+        auto pr = de.propose();
+        CHECK (de.ready() && pr.size() == 1 && std::fabs (std::log2 (pr[0].freq / 7000.0)) < 0.3 && pr[0].dynamic && pr[0].gainDb < 0, "De-Ess: encontrou a sibilancia perto de 7 kHz (%.0f Hz, range %.1f dB, thr %.1f dB)", pr.empty() ? 0.0 : pr[0].freq, pr.empty() ? 0.0 : pr[0].gainDb, pr.empty() ? 0.0 : pr[0].thrDb);
+        std::vector<float> flat ((size_t) n); for (int i = 0; i < n; ++i) flat[(size_t) i] = (float) (0.05 * nd (rng));
+        DeEss d2; d2.begin (FS); for (int off = 0; off < n; off += 4096) d2.feed (flat.data() + off, std::min (4096, n - off));
+        CHECK (d2.propose().empty(), "De-Ess: ruido estacionario nao tem sibilancia (0 propostas)");
+        // Unmask: principal e sidechain ambos fortes a ~2 kHz
+        std::vector<float> a ((size_t) n), s ((size_t) n); Coefs pa = biquadRBJ (BandType::BandPass, FS, 2000, 0, 1.2); Coefs lw = biquadRBJ (BandType::LowPass, FS, 600, 0, 0.7), hg = biquadRBJ (BandType::HighPass, FS, 6000, 0, 0.7);
+        BiquadState q1, q2, q3, q4;
+        for (int i = 0; i < n; ++i) { const double w = nd (rng), w2 = nd (rng); a[(size_t) i] = (float) (0.02 * tick (lw, q1, w) + 0.1 * tick (pa, q2, w2)); s[(size_t) i] = (float) (0.02 * tick (hg, q3, nd (rng)) + 0.1 * tick (pa, q4, nd (rng))); }
+        Unmask um; um.begin (FS); for (int off = 0; off < n; off += 4096) { const int k = std::min (4096, n - off); um.feedMain (a.data() + off, k); um.feedSide (s.data() + off, k); }
+        auto up = um.propose();
+        bool near2k = false; for (auto& p : up) if (std::fabs (std::log2 (p.freq / 2000.0)) < 0.35 && p.needsSidechain && p.dynamic && p.gainDb < 0) near2k = true;
+        bool none600 = true; for (auto& p : up) if (p.freq < 400 || p.freq > 9000) none600 = false;
+        CHECK (um.ready() && near2k && none600, "Unmask: conflito detetado a ~2 kHz, sem cortes onde so um dos sinais existe (%zu propostas)", up.size());
+        Unmask um2; um2.begin (FS); for (int off = 0; off < n; off += 4096) um2.feedMain (a.data() + off, std::min (4096, n - off));
+        CHECK (! um2.ready() && um2.propose().empty(), "Unmask: sem sidechain ligado nao propoe nada");
+    }
+    // 17) Reference Match: referencia = ruido rosa + Bell +6 dB @3 kHz => propoe ~+6 dB perto de 3 kHz
+    {
+        std::mt19937 rng (21); std::normal_distribution<double> nd (0.0, 0.1); const int n = (int) (FS * 20);
+        std::vector<double> w ((size_t) n), pinkA ((size_t) n); for (auto& v : w) v = nd (rng);
+        double b0 = 0, b1 = 0, b2 = 0; for (int i = 0; i < n; ++i) { b0 = 0.99765 * b0 + w[(size_t) i] * 0.0990460; b1 = 0.96300 * b1 + w[(size_t) i] * 0.2965164; b2 = 0.57000 * b2 + w[(size_t) i] * 1.0526913; pinkA[(size_t) i] = b0 + b1 + b2 + w[(size_t) i] * 0.1848; }
+        std::vector<double> pinkB ((size_t) n); for (auto& v : w) v = nd (rng); b0 = b1 = b2 = 0;
+        for (int i = 0; i < n; ++i) { b0 = 0.99765 * b0 + w[(size_t) i] * 0.0990460; b1 = 0.96300 * b1 + w[(size_t) i] * 0.2965164; b2 = 0.57000 * b2 + w[(size_t) i] * 1.0526913; pinkB[(size_t) i] = b0 + b1 + b2 + w[(size_t) i] * 0.1848; }
+        Cascade cas = designBand (BandType::Bell, 1, FS, 3000, 6.0, 1.0); std::vector<BiquadState> st (1); for (int i = 0; i < n; ++i) pinkB[(size_t) i] = tick (cas.c[0], st[0], pinkB[(size_t) i]);
+        auto ltas = [&] (const std::vector<double>& s) { RefAnalyzer ra; ra.begin (FS); std::vector<float> f (s.begin(), s.end()); for (int off = 0; off < n; off += 4096) ra.feed (f.data() + off, std::min (4096, n - off)); return ra.logDb(); };
+        const auto A = ltas (pinkA), B = ltas (pinkB);
+        auto pr = matchPropose (B, A, 1.0, 8, 12.0, FS);
+        double g3k = 0; bool found = false; for (auto& p : pr) if (std::fabs (std::log2 (p.freq / 3000.0)) < 0.25) { found = true; g3k = p.gainDb; }
+        CHECK (found && std::fabs (g3k - 6.0) < 1.8, "Reference Match: encontra o Bell de +6 dB @3 kHz (proposta %.1f dB; %zu bandas)", g3k, pr.size());
+        auto same = matchPropose (A, A, 1.0, 8, 12.0, FS);
+        CHECK (same.empty(), "Reference Match: referencia igual ao material => nenhuma banda");
+        auto weak = matchPropose (B, A, 0.5, 8, 12.0, FS); double g3w = 0; for (auto& p : weak) if (std::fabs (std::log2 (p.freq / 3000.0)) < 0.25) g3w = p.gainDb;
+        CHECK (g3w > 1.5 && g3w < g3k, "Reference Match: forca 50%% reduz a proposta (%.1f dB < %.1f dB)", g3w, g3k);
+    }
+    // 18) Morph
+    {
+        BandParams A[kNumBands], B[kNumBands], O[kNumBands];
+        A[0].on = true; A[0].type = BandType::Bell; A[0].freq = 200; A[0].gain = -4; A[0].q = 1;
+        B[0].on = true; B[0].type = BandType::Bell; B[0].freq = 800; B[0].gain = 4; B[0].q = 4;
+        A[1].on = true; A[1].type = BandType::Bell; A[1].freq = 3000; A[1].gain = 6;                       // so em A
+        B[2].on = true; B[2].type = BandType::HighPass; B[2].freq = 40;                                    // so em B (corte)
+        morphBands (A, B, 0.0, O); const bool is0 = std::fabs (O[0].freq - 200) < 1e-6 && O[0].gain == -4 && O[1].gain == 6 && ! O[2].on;
+        morphBands (A, B, 1.0, O); const bool is1 = std::fabs (O[0].freq - 800) < 1e-6 && O[0].gain == 4 && ! O[1].on && O[2].on;
+        morphBands (A, B, 0.5, O);
+        CHECK (is0 && is1, "Morph: m=0 devolve A e m=1 devolve B");
+        CHECK (std::fabs (O[0].freq - 400.0) < 1e-6 && std::fabs (O[0].gain) < 1e-9 && std::fabs (O[0].q - 2.0) < 1e-6 && std::fabs (O[1].gain - 3.0) < 1e-9, "Morph: m=0,5: freq 400 Hz (geometrica), ganho 0, Q 2, banda so-em-A com metade do ganho (%.2f)", O[1].gain);
+        double prev = -1e9; bool mono = true; for (int i = 0; i <= 20; ++i) { morphBands (A, B, i / 20.0, O); if (O[0].gain < prev - 1e-12) mono = false; prev = O[0].gain; }
+        CHECK (mono, "Morph: ganho evolui monotonicamente de A para B");
+    }
+    // 19) Mix Unmask: MixMeter, registo e analise (kick / bass / vocals sinteticos)
+    {
+        MixMeter mm; mm.prepare (FS); int frames = 0; float lastDb[kMixBands] {}; std::vector<float> x (48000);
+        for (size_t i = 0; i < x.size(); ++i) x[i] = 0.5f * (float) std::sin (2 * M_PI * 1000.0 * (double) i / FS);
+        mm.process (x.data(), x.data(), (int) x.size(), [&] (const float* db, float) { ++frames; std::copy (db, db + kMixBands, lastDb); });
+        int bm = 0; for (int b = 0; b < kMixBands; ++b) if (lastDb[b] > lastDb[bm]) bm = b;
+        CHECK (frames == 40 && std::fabs (mixBandFreq (bm) - 1000.0) < 120.0 && std::fabs (lastDb[bm] - (-6.0)) < 1.0, "MixMeter: 1 s => %d quadros de 25 ms; seno 1 kHz a -6 dBFS lido na banda %.0f Hz = %.1f dB", frames, mixBandFreq (bm), lastDb[bm]);
+        // registo
+        auto& reg = MixRegistry::get(); int a = reg.add (&mm), b2 = reg.add (&x);
+        reg.setName (a, "Kick"); reg.setPriority (a, 4); reg.setAnalysing (a, true, FS);
+        for (int k = 0; k < 10; ++k) { float d[kMixBands]; for (int i = 0; i < kMixBands; ++i) d[i] = -20.f - (float) k; reg.pushFrame (a, d, -10.f); }
+        std::vector<std::array<float, kMixBands>> fr; const int n = reg.copyFrames (a, 100, fr);
+        auto lst = reg.list (&mm); bool self = false; for (auto& t : lst) if (t.slot == a && t.isSelf && t.name == "Kick" && t.priority == 4 && t.analysing) self = true;
+        CHECK (n == 10 && fr.back()[0] == -29.f && fr.front()[0] == -20.f && self, "MixRegistry: nome/prioridade/quadros (%d quadros, ultimo %.0f dB)", n, fr.back()[0]);
+        MixMail ml; ml.undoName = "x"; reg.post (b2, ml); MixMail got; const bool had = reg.hasMail (b2) && reg.takeMail (b2, got) && ! reg.hasMail (b2) && got.undoName == "x";
+        CHECK (had, "MixRegistry: correio entre instancias");
+        reg.remove (a); reg.remove (b2);
+    }
+    {
+        // quadros sinteticos: 12 s (480 quadros). Kick: rajadas de 80 ms em cada 500 ms nas bandas 60-110 Hz. Bass: continuo 40-130 Hz. Vocal: continuo 300 Hz-3 kHz com ondulacao.
+        auto bandOf = [] (double f) { int best = 0; for (int b = 0; b < kMixBands; ++b) if (std::fabs (std::log (mixBandFreq (b) / f)) < std::fabs (std::log (mixBandFreq (best) / f))) best = b; return best; };
+        const int b60 = bandOf (60), b110 = bandOf (110), b40 = bandOf (80), b130 = bandOf (130), b300 = bandOf (300), b3k = bandOf (3000);
+        std::mt19937 rng (3); std::uniform_real_distribution<float> rip (-1.5f, 1.5f);
+        MixTrack kick, bass, vox, pad; kick.name = "Kick"; kick.priority = 4; bass.name = "Bass"; bass.priority = 3; vox.name = "Vocals"; vox.priority = 5; pad.name = "Pad"; pad.priority = 2;
+        for (int t = 0; t < 480; ++t)
+        {
+            std::array<float, kMixBands> k, ba, vo, pd; k.fill (-120.f); ba.fill (-120.f); vo.fill (-120.f); pd.fill (-120.f);
+            const bool hit = (t % 20) < 3;
+            for (int b = b60; b <= b110; ++b) if (hit) k[(size_t) b] = -6.f + rip (rng); else k[(size_t) b] = -75.f;
+            for (int b = b40; b <= b130; ++b) ba[(size_t) b] = -9.f + rip (rng);
+            for (int b = b300; b <= b3k; ++b) { vo[(size_t) b] = -14.f + rip (rng); pd[(size_t) b] = -15.f + rip (rng); }
+            kick.frames.push_back (k); bass.frames.push_back (ba); vox.frames.push_back (vo); pad.frames.push_back (pd);
+        }
+        auto res = analyseMix ({ kick, bass, vox }, 1.5, 3);
+        const MixPair* kb = nullptr; const MixPair* vb = nullptr; for (auto& p : res.pairs) { if (p.protectedIdx == 0 && p.victimIdx == 1) kb = &p; if (p.protectedIdx == 2 && p.victimIdx == 1) vb = &p; }
+        CHECK (kb != nullptr && ! kb->conflicts.empty() && kb->conflicts[0].freq > 55 && kb->conflicts[0].freq < 135, "Mix Unmask: Kick protegido vs Bass => conflito em %.0f Hz", kb && ! kb->conflicts.empty() ? kb->conflicts[0].freq : 0.0);
+        if (kb && ! kb->conflicts.empty())
+        {
+            const auto& c = kb->conflicts[0];
+            std::printf ("INFO    Kick->Bass @%.0f Hz: corte %.1f dB | EQ %.0f%% (colateral %.0f%%) | Dinamica %.0f%% | Sidechain %.0f%% (colateral %.0f%%) => melhor: %s", c.freq, c.cutDb, 100 * c.eq.score, 100 * c.eq.collateral, 100 * c.dyn.score, 100 * c.sc.score, 100 * c.sc.collateral, c.best == MixMethod::Sidechain ? "SIDECHAIN" : (c.best == MixMethod::Dynamic ? "DINAMICA" : "EQ")); std::printf ("\n");
+            CHECK (kb->best == MixMethod::Sidechain && c.sc.score > c.eq.score + 0.2, "Mix Unmask: Kick percussivo vs Bass continuo => melhor metodo = sidechain (SC %.2f vs EQ %.2f)", c.sc.score, c.eq.score);
+            CHECK (c.pSc.needsSidechain && c.pSc.dynamic && c.pEq.gainDb < 0 && ! c.pEq.dynamic, "Mix Unmask: propostas geradas (EQ estatico, dinamico, sidechain)");
+        }
+        CHECK (vb == nullptr || vb->conflicts.empty(), "Mix Unmask: Vocal (300 Hz-3 kHz) e Bass (40-130 Hz) nao se sobrepoem => sem conflitos");
+        // dois sinais continuos na mesma zona => EQ estatico basta
+        auto res2 = analyseMix ({ vox, pad }, 1.5, 3); bool eqBest = ! res2.pairs.empty() && ! res2.pairs[0].conflicts.empty() && res2.pairs[0].best == MixMethod::Eq;
+        CHECK (eqBest, "Mix Unmask: Vocal vs Pad, ambos continuos na mesma zona => melhor metodo = EQ estatico (colateral %.0f%%)", eqBest ? 100 * res2.pairs[0].conflicts[0].eq.collateral : -1.0);
+        CHECK (res2.pairs[0].protectedIdx == 0, "Mix Unmask: a pista de maior prioridade (Vocals) e a protegida");
+        MixTrack few = kick; few.frames.resize (20); auto res3 = analyseMix ({ few, bass }, 1.5, 3); CHECK (res3.pairs.empty() && ! res3.message.empty(), "Mix Unmask: poucos dados => aviso em vez de resultado");
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;

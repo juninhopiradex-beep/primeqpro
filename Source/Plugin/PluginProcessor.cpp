@@ -58,6 +58,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout PrimeqProcessor::createLayou
     L.add (std::make_unique<APB> (PID ("autogain"), "Auto Gain", false));
     L.add (std::make_unique<APB> (PID ("delta"), "Delta", false));
     L.add (std::make_unique<APB> (PID ("scext"), "External Sidechain", false));
+    L.add (std::make_unique<APC> (PID ("look"), "Lookahead", juce::StringArray { "Off", "1 ms", "2 ms", "3 ms", "5 ms", "10 ms" }, 0));
+    L.add (std::make_unique<APB> (PID ("dh_on"), "De-harsh On", false));
+    L.add (std::make_unique<APF> (PID ("dh_amount"), "De-harsh Amount", juce::NormalisableRange<float> (0.f, 100.f, 0.1f), 50.f, FA().withLabel ("%")));
+    L.add (std::make_unique<APF> (PID ("dh_lo"), "De-harsh Low", skewed (1000.f, 8000.f, 2500.f), 2500.f, FA().withLabel ("Hz")));
+    L.add (std::make_unique<APF> (PID ("dh_hi"), "De-harsh High", skewed (3000.f, 18000.f, 9000.f), 10000.f, FA().withLabel ("Hz")));
+    L.add (std::make_unique<APF> (PID ("dh_sens"), "De-harsh Tolerance", juce::NormalisableRange<float> (0.f, 12.f, 0.1f), 4.f, FA().withLabel ("dB")));
+    L.add (std::make_unique<APF> (PID ("dh_attack"), "De-harsh Attack", skewed (1.f, 100.f, 10.f), 8.f, FA().withLabel ("ms")));
+    L.add (std::make_unique<APF> (PID ("dh_release"), "De-harsh Release", skewed (10.f, 500.f, 80.f), 80.f, FA().withLabel ("ms")));
+    L.add (std::make_unique<APB> (PID ("dh_delta"), "De-harsh Delta (ouvir o removido)", false));
+    L.add (std::make_unique<APC> (PID ("ch_mode"), "Character", juce::StringArray { "Off", "Clean", "Subtle", "Warm" }, 0));
+    L.add (std::make_unique<APF> (PID ("ch_drive"), "Character Drive", juce::NormalisableRange<float> (0.f, 100.f, 0.1f), 40.f, FA().withLabel ("%")));
+    L.add (std::make_unique<APF> (PID ("ch_mix"), "Character Mix", juce::NormalisableRange<float> (0.f, 100.f, 0.1f), 100.f, FA().withLabel ("%")));
+    L.add (std::make_unique<APC> (PID ("ch_os"), "Character Oversampling", juce::StringArray { "1x", "2x", "4x" }, 1));
+    L.add (std::make_unique<APB> (PID ("morph_on"), "Morph On", false));
+    L.add (std::make_unique<APF> (PID ("morph"), "Morph A-B", juce::NormalisableRange<float> (0.f, 100.f, 0.1f), 0.f, FA().withLabel ("%")));
     const auto meta = [] { return CA().withAutomatable (false).withMeta (true); };
     L.add (std::make_unique<APC> (PID ("fftsize"), "FFT Size", juce::StringArray { "2048", "4096", "8192" }, 1, meta()));
     L.add (std::make_unique<APC> (PID ("specview"), "Spectrum View", juce::StringArray { "Stereo", "Left", "Right", "Mid", "Side" }, 0, meta()));
@@ -82,15 +97,21 @@ PrimeqProcessor::PrimeqProcessor()
     }
     pPhase = apvts.getRawParameterValue ("phase"); pBypass = apvts.getRawParameterValue ("bypass"); pOut = apvts.getRawParameterValue ("out");
     pAuto = apvts.getRawParameterValue ("autogain"); pDelta = apvts.getRawParameterValue ("delta"); pScExt = apvts.getRawParameterValue ("scext");
+    auto G = [&] (const char* k) { return apvts.getRawParameterValue (k); };
+    pLook = G ("look"); pDhOn = G ("dh_on"); pDhAmt = G ("dh_amount"); pDhLo = G ("dh_lo"); pDhHi = G ("dh_hi"); pDhSens = G ("dh_sens"); pDhAtk = G ("dh_attack"); pDhRel = G ("dh_release"); pDhDelta = G ("dh_delta");
+    pChMode = G ("ch_mode"); pChDrive = G ("ch_drive"); pChMix = G ("ch_mix"); pChOs = G ("ch_os"); pMorphOn = G ("morph_on"); pMorph = G ("morph");
     for (auto& d : dynTel) d.store (0.f);
-    apvts.addParameterListener ("phase", this);
+    for (const char* id : { "phase", "look", "dh_on", "ch_mode", "ch_os" }) apvts.addParameterListener (id, this);
+    mixSlotId = pq::MixRegistry::get().add (this);
+    if (juce::MessageManager::getInstanceWithoutCreating() != nullptr) mixTimer.startTimer (150);
     worker = std::make_unique<FirWorker> (*this);
     worker->startThread (juce::Thread::Priority::background);
 }
 
 PrimeqProcessor::~PrimeqProcessor()
 {
-    apvts.removeParameterListener ("phase", this);
+    mixTimer.stopTimer(); pq::MixRegistry::get().remove (mixSlotId);
+    for (const char* id : { "phase", "look", "dh_on", "ch_mode", "ch_os" }) apvts.removeParameterListener (id, this);
     worker->stopThread (2000);
 }
 
@@ -104,11 +125,40 @@ bool PrimeqProcessor::isBusesLayoutSupported (const BusesLayout& l) const
 }
 
 int PrimeqProcessor::latencyFor (int phaseIdx) const { return phaseIdx <= 0 ? 0 : firLatencyFor (sr); }
-
-void PrimeqProcessor::parameterChanged (const juce::String& id, float v)
+int PrimeqProcessor::lookSamplesFor (int idx) const
 {
-    if (id == "phase") { const int lat = latencyFor ((int) (v + 0.5f)); latencySamples.store (lat); setLatencySamples (lat); }
+    static const double ms[6] = { 0.0, 1.0, 2.0, 3.0, 5.0, 10.0 };
+    return (int) std::lround (ms[std::clamp (idx, 0, 5)] * 0.001 * sr);
 }
+int PrimeqProcessor::stageLatency (const Stage& st) const
+{
+    return (st.path ? firLatencyFor (sr) : 0) + st.look + (st.dh ? DeHarsh::kLatency : 0) + (st.os > 0 ? Oversampler::latencyFor (st.os) : 0);
+}
+int PrimeqProcessor::declaredLatency() const
+{
+    Stage t; t.path = pPhase->load() > 0.5f ? 1 : 0; t.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); t.dh = pDhOn->load() > 0.5f;
+    const int cm = (int) (pChMode->load() + 0.5f); t.os = cm > 0 ? (1 << std::clamp ((int) (pChOs->load() + 0.5f), 0, 2)) : 0;
+    return stageLatency (t);
+}
+void PrimeqProcessor::updateLatency() { const int lat = declaredLatency(); if (lat != latencySamples.load()) { latencySamples.store (lat); setLatencySamples (lat); } }
+
+void PrimeqProcessor::setTrackName (const juce::String& n, bool byUser)
+{
+    auto& rg = pq::MixRegistry::get(); rg.setName (mixSlotId, n.toStdString()); if (byUser) nameByUser = true;
+    if (byUser) rg.setPriority (mixSlotId, pq::guessPriority (n.toStdString()));
+}
+void PrimeqProcessor::updateTrackProperties (const TrackProperties& tp)
+{
+    if (nameByUser || ! tp.name.has_value() || tp.name->isEmpty()) return;
+    setTrackName (*tp.name, false); pq::MixRegistry::get().setPriority (mixSlotId, pq::guessPriority (tp.name->toStdString()));
+}
+void PrimeqProcessor::pollMixMail()
+{
+    auto& rg = pq::MixRegistry::get(); pq::MixMail m; int guard = 0;
+    while (guard++ < 8 && rg.takeMail (mixSlotId, m)) smartApply (m.props, m.undoName.c_str());
+}
+
+void PrimeqProcessor::parameterChanged (const juce::String&, float) { updateLatency(); }
 
 void PrimeqProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
@@ -124,9 +174,19 @@ void PrimeqProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         for (auto& c : conv) { c.prepare (spec); c.reset(); }
         firValid.store (false); firCross.store (false); lastKey.clear(); firFs.store ((int) sr);
         analyzer.prepare (sr);
+        deharsh.prepare (sr); character.prepare (sr); mixMeter.prepare (sr); pq::MixRegistry::get().setAnalysing (mixSlotId, pq::MixRegistry::get().analysing (mixSlotId), sr); mixWas = false;
+        lkL.assign ((size_t) kLookRing, 0.0); lkR.assign ((size_t) kLookRing, 0.0); uL.assign ((size_t) kChunk, 0.0); uR.assign ((size_t) kChunk, 0.0); lkW = 0;
+        for (auto& v : scBuf) v.assign ((size_t) kChunk, 0.f);
         fadeGain = fadeTarget = 1.f; path = 0; primeLeft = 0; bypState = pBypass->load() > 0.5f ? 1.f : 0.f; gainState = 1.f; agState = 0.f;
+        // arranca ja com a configuracao pedida: a latencia declarada e a real coincidem desde o primeiro bloco
+        applied = Stage(); applied.path = pPhase->load() > 0.5f ? 1 : 0; applied.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); applied.dh = pDhOn->load() > 0.5f;
+        { const int cm = (int) (pChMode->load() + 0.5f); applied.os = cm > 0 ? (1 << std::clamp ((int) (pChOs->load() + 0.5f), 0, 2)) : 0; }
+        if (applied.path == 1) applied.path = 0;    // o FIR so entra quando o desenho estiver pronto (transicao segura)
+        procLat = stageLatency (applied);
+        if (applied.os > 0) character.setup (CharMode::Clean, 0.0, 1.0, applied.os);
+        primeLeft = procLat;
     }
-    const int lat = latencyFor ((int) (pPhase->load() + 0.5f));
+    const int lat = declaredLatency();
     latencySamples.store (lat); setLatencySamples (lat);
 }
 
@@ -193,6 +253,22 @@ void PrimeqProcessor::firProcess (double* L, double* R, int m)
     for (int i = 0; i < m; ++i) { L[i] = fOut[0][(size_t) i]; R[i] = fOut[1][(size_t) i]; }
 }
 
+void PrimeqProcessor::resetChain()
+{
+    core.reset(); for (auto& c : conv) c.reset();
+    std::fill (lkL.begin(), lkL.end(), 0.0); std::fill (lkR.begin(), lkR.end(), 0.0); lkW = 0;
+    deharsh.reset();
+    if (applied.os > 0) character.setup (CharMode::Clean, 0.0, 1.0, applied.os);
+    character.reset();
+}
+
+void PrimeqProcessor::applyMorph (BandParams* io) const
+{
+    if (pMorphOn->load (std::memory_order_relaxed) < 0.5f) return;
+    const juce::SpinLock::ScopedTryLockType l (morphLock);                 // nunca espera na thread de audio
+    if (l.isLocked() && morphSet[0] && morphSet[1]) morphBands (morphA, morphB, pMorph->load (std::memory_order_relaxed) / 100.0, io);
+}
+
 void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -201,18 +277,27 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     const int nch = std::min (2, getMainBusNumInputChannels());
     if (nch < 1 || total < 1) return;
 
-    BandParams bands[kNumBands]; readBands (bands); core.setParams (bands);
+    BandParams bands[kNumBands]; readBands (bands); applyMorph (bands); core.setParams (bands);
     core.setListen (listenBand.load (std::memory_order_relaxed));
     const int phaseIdx = std::clamp ((int) (pPhase->load() + 0.5f), 0, 2);
     const bool bypass = pBypass->load() > 0.5f, delta = pDelta->load() > 0.5f, autoG = pAuto->load() > 0.5f;
-    const int lat = std::min (latencyFor (phaseIdx), kDryCap - kChunk - 1);
+    Stage tgt; tgt.path = phaseIdx != 0 ? 1 : 0; tgt.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); tgt.dh = pDhOn->load() > 0.5f;
+    const int chModeIdx = std::clamp ((int) (pChMode->load() + 0.5f), 0, 3);
+    tgt.os = chModeIdx > 0 ? (1 << std::clamp ((int) (pChOs->load() + 0.5f), 0, 2)) : 0;
     const bool unlocked = AccessManager::get().isUnlocked();
-    const bool scExt = pScExt->load() > 0.5f && getBusCount (true) > 1 && getBus (true, 1) != nullptr && getBus (true, 1)->isEnabled();
-    const int scBase = scExt ? getChannelIndexInProcessBlockBuffer (true, 1, 0) : -1;
-    const int scCh = scExt ? getBus (true, 1)->getNumberOfChannels() : 0;
-    const bool wantFir = phaseIdx != 0;
+    const bool scAvail = getBusCount (true) > 1 && getBus (true, 1) != nullptr && getBus (true, 1)->isEnabled();
+    const bool scExt = pScExt->load() > 0.5f && scAvail;
+    const int scBase = scAvail ? getChannelIndexInProcessBlockBuffer (true, 1, 0) : -1;
+    const int scCh = scAvail ? getBus (true, 1)->getNumberOfChannels() : 0;
+    const bool wantFir = tgt.path == 1;
+    const int latDry = std::min (stageLatency (tgt), kDryCap - kChunk - 1);
     const float fadeStep = (float) (1.0 / (0.008 * sr)), bk = (float) (1.0 - std::exp (-1.0 / (0.005 * sr))), gk = (float) (1.0 - std::exp (-1.0 / (0.02 * sr)));
     const double outDb = pOut->load();
+    if (tgt.dh)
+    {
+        DeHarshParams hp; hp.amount = pDhAmt->load() / 100.0; hp.loHz = pDhLo->load(); hp.hiHz = pDhHi->load(); hp.sensDb = pDhSens->load();
+        hp.attackMs = pDhAtk->load(); hp.releaseMs = pDhRel->load(); hp.delta = pDhDelta->load() > 0.5f; deharsh.setParams (hp);
+    }
     float pkL = 0.f, pkR = 0.f;
 
     float* wl = buffer.getWritePointer (0); float* wr = nch > 1 ? buffer.getWritePointer (1) : nullptr;
@@ -227,37 +312,68 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             dryRing[0][(size_t) ((dryW + i) & (kDryCap - 1))] = a; dryRing[1][(size_t) ((dryW + i) & (kDryCap - 1))] = b;
         }
         analyzer.pushPre (pL.data(), pR.data(), m);
+        if (mixSlotId >= 0 && pq::MixRegistry::get().analysing (mixSlotId))      // Mix Unmask (opt-in): niveis por banda a cada 25 ms
+        {
+            if (! mixWas) { mixMeter.reset(); mixWas = true; }
+            mixMeter.process (pL.data(), pR.data(), m, [this] (const float* db, float all) { pq::MixRegistry::get().pushFrame (mixSlotId, db, all); });
+        }
+        else mixWas = false;
 
-        // sidechain externo (so alimenta os detetores)
+        // sidechain externo: alimenta so os detetores (e a captura Unmask); nunca e misturado na saida
         const double *scLp = nullptr, *scRp = nullptr;
-        if (scExt && scBase >= 0)
+        if (scAvail && scBase >= 0)
         {
             const float* s0 = buffer.getReadPointer (scBase); const float* s1 = scCh > 1 ? buffer.getReadPointer (scBase + 1) : s0;
-            for (int i = 0; i < m; ++i) { sL[(size_t) i] = s0[off + i]; sR[(size_t) i] = s1[off + i]; }
-            scLp = sL.data(); scRp = sR.data();
+            for (int i = 0; i < m; ++i) { sL[(size_t) i] = s0[off + i]; sR[(size_t) i] = s1[off + i]; scBuf[0][(size_t) i] = s0[off + i]; scBuf[1][(size_t) i] = s1[off + i]; }
+            analyzer.pushSc (scBuf[0].data(), scBuf[1].data(), m);
+            if (scExt) { scLp = sL.data(); scRp = sR.data(); }
         }
 
         if (unlocked)
         {
-            // transicao segura entre caminhos (IIR <-> FIR): desvanece para o dry, troca, volta
-            if (primeLeft > 0) { fadeTarget = 0.f; primeLeft -= m; }   // FIR a encher (latencia): sai o dry alinhado, nunca silencio
-            else if ((path == 1) != wantFir)
+            // transicao segura: qualquer mudanca que altere a latencia (fase, lookahead, De-harsh, Character/oversampling)
+            // desvanece para o dry alinhado, troca a configuracao, enche as linhas de atraso e volta
+            if (primeLeft > 0) { fadeTarget = 0.f; primeLeft -= m; }
+            else if (! (tgt == applied))
             {
                 fadeTarget = 0.f;
-                if (fadeGain <= 1e-4f && (! wantFir || (firValid.load() && firFs.load() == (int) sr)))
+                const bool firOk = ! wantFir || (firValid.load() && firFs.load() == (int) sr);
+                if (fadeGain <= 1e-4f && firOk)
                 {
-                    path = wantFir ? 1 : 0; core.reset(); for (auto& c : conv) c.reset();
-                    if (path == 1) primeLeft = lat; else fadeTarget = 1.f;
+                    applied = tgt; path = applied.path; procLat = std::min (stageLatency (applied), kDryCap - kChunk - 1);
+                    resetChain(); primeLeft = procLat; if (primeLeft == 0) fadeTarget = 1.f;
                 }
             }
             else fadeTarget = 1.f;
 
-            if (path == 0) core.process (dL.data(), dR.data(), m, scLp, scRp, true);
-            else { core.process (dL.data(), dR.data(), m, scLp, scRp, false); firProcess (dL.data(), dR.data(), m); }
+            // lookahead: o programa e atrasado; os detetores veem o sinal SEM atraso (ou o sidechain externo)
+            const double *detL = scLp, *detR = scRp;
+            if (applied.look > 0)
+            {
+                const int k = applied.look;
+                for (int i = 0; i < m; ++i)
+                {
+                    uL[(size_t) i] = dL[(size_t) i]; uR[(size_t) i] = dR[(size_t) i];
+                    lkL[(size_t) ((lkW + i) & (kLookRing - 1))] = dL[(size_t) i]; lkR[(size_t) ((lkW + i) & (kLookRing - 1))] = dR[(size_t) i];
+                    dL[(size_t) i] = lkL[(size_t) ((lkW + i - k) & (kLookRing - 1))]; dR[(size_t) i] = lkR[(size_t) ((lkW + i - k) & (kLookRing - 1))];
+                }
+                lkW = (lkW + m) & (kLookRing - 1);
+                if (! scExt) { detL = uL.data(); detR = uR.data(); }
+            }
+
+            if (path == 0) core.process (dL.data(), dR.data(), m, detL, detR, true);
+            else { core.process (dL.data(), dR.data(), m, detL, detR, false); firProcess (dL.data(), dR.data(), m); }
+            if (applied.dh) { deharsh.process (dL.data(), dR.data(), m); dhRedDb.store ((float) deharsh.lastMaxReductionDb(), std::memory_order_relaxed); }
+            if (applied.os > 0)
+            {
+                character.setup ((CharMode) chModeIdx, pChDrive->load() / 100.0, pChMix->load() / 100.0, applied.os);
+                character.process (dL.data(), dR.data(), m);
+            }
             if (autoG) agState += ((float) std::clamp (core.autoGainDb(), -24.0, 24.0) - agState) * 0.05f; else agState += (0.f - agState) * 0.05f;
         }
 
         const double gTarget = std::pow (10.0, (outDb + agState) / 20.0);
+        const int lat = latDry;   // o dry alinha SEMPRE com a latencia declarada ao anfitriao (PDC); o wet so a alcanca apos a transicao
         for (int i = 0; i < m; ++i)
         {
             const int rd = (dryW + i - lat) & (kDryCap - 1);
@@ -294,7 +410,7 @@ void PrimeqProcessor::firDesignTick()
     const juce::ScopedLock sl (firLock);
     const int phaseIdx = std::clamp ((int) (pPhase->load() + 0.5f), 0, 2);
     if (phaseIdx == 0 || sr <= 0.0 || firFs.load() != (int) sr) return;
-    BandParams b[kNumBands]; readBands (b); double dyn[kNumBands];
+    BandParams b[kNumBands]; readBands (b); applyMorph (b); double dyn[kNumBands];
     for (int i = 0; i < kNumBands; ++i) dyn[i] = std::round (dynTel[(size_t) i].load (std::memory_order_relaxed) * 10.f) / 10.0;
     const double alpha = alphaFor ((PhaseMode) phaseIdx);
     std::vector<double> key; key.reserve (kNumBands * 12 + 3); key.push_back (alpha); key.push_back (sr);
@@ -327,8 +443,24 @@ void PrimeqProcessor::getStateInformation (juce::MemoryBlock& dest)
     auto st = apvts.copyState(); st.setProperty (kStateVersionKey, kStateVersion, nullptr);
     juce::XmlElement root ("PRIMEQPRO");
     root.setAttribute ("uiW", uiWidth); root.setAttribute ("uiH", uiHeight); root.setAttribute ("slot", slot);
+    { auto& rg = pq::MixRegistry::get(); root.setAttribute ("mixName", juce::String (rg.name (mixSlotId))); root.setAttribute ("mixPri", rg.priority (mixSlotId)); root.setAttribute ("mixOn", rg.analysing (mixSlotId) ? 1 : 0); root.setAttribute ("mixUser", nameByUser ? 1 : 0); }
     if (auto x = st.createXml()) root.addChildElement (x.release());
     for (int i = 0; i < 2; ++i) if (slots[i].isValid()) { auto* e = new juce::XmlElement ("AB"); e->setAttribute ("i", i); if (auto x = slots[i].createXml()) e->addChildElement (x.release()); root.addChildElement (e); }
+    {
+        const juce::SpinLock::ScopedLockType l (morphLock);
+        for (int w = 0; w < 2; ++w)
+        {
+            if (! morphSet[w]) continue;
+            auto* e = new juce::XmlElement ("MORPH"); e->setAttribute ("w", w); const BandParams* src = w == 0 ? morphA : morphB;
+            for (int b = 0; b < kNumBands; ++b)
+            {
+                const BandParams& p = src[b];
+                e->setAttribute ("b" + juce::String (b), juce::String::formatted ("%d,%d,%.6f,%.6f,%.6f,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d", p.on ? 1 : 0, (int) p.type, p.freq, p.gain, p.q, p.slope, (int) p.place, p.dyn ? 1 : 0,
+                                 p.thr, p.range, p.ratio, p.attackMs, p.holdMs, p.releaseMs, p.kneeDb, (int) p.det, (int) p.dir));
+            }
+            root.addChildElement (e);
+        }
+    }
     copyXmlToBinary (root, dest);
 }
 
@@ -346,9 +478,42 @@ void PrimeqProcessor::setStateInformation (const void* data, int size)
     {
         uiWidth = std::clamp (xml->getIntAttribute ("uiW", uiWidth), 760, 3000); uiHeight = std::clamp (xml->getIntAttribute ("uiH", uiHeight), 480, 2000);
         slot = xml->getIntAttribute ("slot", 0) & 1;
+        if (xml->hasAttribute ("mixName")) { auto& rg = pq::MixRegistry::get(); nameByUser = xml->getIntAttribute ("mixUser", 0) != 0; if (nameByUser) rg.setName (mixSlotId, xml->getStringAttribute ("mixName").toStdString()); rg.setPriority (mixSlotId, xml->getIntAttribute ("mixPri", 2)); rg.setAnalysing (mixSlotId, xml->getIntAttribute ("mixOn", 0) != 0, sr); }
         for (auto* e : xml->getChildWithTagNameIterator ("AB")) if (auto* c = e->getFirstChildElement()) slots[e->getIntAttribute ("i") & 1] = juce::ValueTree::fromXml (*c);
+        {
+            const juce::SpinLock::ScopedLockType l (morphLock); morphSet[0] = morphSet[1] = false;
+            for (auto* e : xml->getChildWithTagNameIterator ("MORPH"))
+            {
+                const int w = e->getIntAttribute ("w") & 1; BandParams* dst = w == 0 ? morphA : morphB; bool ok = true;
+                for (int b = 0; b < kNumBands; ++b)
+                {
+                    const auto t = juce::StringArray::fromTokens (e->getStringAttribute ("b" + juce::String (b)), ",", ""); if (t.size() < 17) { ok = false; break; }
+                    BandParams& p = dst[b]; p.on = t[0].getIntValue() != 0; p.type = (BandType) std::clamp (t[1].getIntValue(), 0, 7); p.freq = t[2].getDoubleValue(); p.gain = t[3].getDoubleValue(); p.q = t[4].getDoubleValue();
+                    p.slope = std::clamp (t[5].getIntValue(), 0, kNumSlopes - 1); p.place = (Placement) std::clamp (t[6].getIntValue(), 0, 4); p.dyn = t[7].getIntValue() != 0;
+                    p.thr = t[8].getDoubleValue(); p.range = t[9].getDoubleValue(); p.ratio = t[10].getDoubleValue(); p.attackMs = t[11].getDoubleValue(); p.holdMs = t[12].getDoubleValue();
+                    p.releaseMs = t[13].getDoubleValue(); p.kneeDb = t[14].getDoubleValue(); p.det = (DetMode) std::clamp (t[15].getIntValue(), 0, 1); p.dir = (DynDir) std::clamp (t[16].getIntValue(), 0, 1);
+                }
+                morphSet[w] = ok;
+            }
+        }
     }
     undo.clearUndoHistory();
+    updateLatency();
+}
+
+void PrimeqProcessor::morphCapture (int which)
+{
+    BandParams cur[kNumBands]; readBands (cur);
+    const juce::SpinLock::ScopedLockType l (morphLock);
+    BandParams* dst = (which & 1) ? morphB : morphA; for (int b = 0; b < kNumBands; ++b) dst[b] = cur[b];
+    morphSet[which & 1] = true;
+}
+void PrimeqProcessor::morphClear() { const juce::SpinLock::ScopedLockType l (morphLock); morphSet[0] = morphSet[1] = false; }
+
+void PrimeqProcessor::resetFx()
+{
+    for (const char* k : { "look", "dh_on", "dh_amount", "dh_lo", "dh_hi", "dh_sens", "dh_attack", "dh_release", "dh_delta", "ch_mode", "ch_drive", "ch_mix", "ch_os", "morph_on", "morph" })
+        if (auto* p = apvts.getParameter (k)) { p->beginChangeGesture(); p->setValueNotifyingHost (p->getDefaultValue()); p->endChangeGesture(); }
 }
 
 void PrimeqProcessor::toggleAB()
@@ -384,11 +549,18 @@ namespace
 const std::vector<PrimeqProcessor::FactoryPreset>& PrimeqProcessor::factoryPresets()
 {
     static const std::vector<FactoryPreset> v {
-        { "Init (Flat)", [] (PrimeqProcessor& p) { p.resetAllBands(); } },
+        { "Init (Flat)", [] (PrimeqProcessor& p) { p.resetAllBands(); p.resetFx(); } },
         { "Vocal Presence", [] (PrimeqProcessor& p) { p.resetAllBands(); p.setBand (0, band (BandType::HighPass, 80, 0, 0.707, 3)); p.setBand (1, band (BandType::Bell, 300, -2.5, 1.2)); p.setBand (2, band (BandType::Bell, 3500, 2.0, 1.0)); p.setBand (3, band (BandType::HighShelf, 10000, 2.0, 0.707)); } },
         { "Master - Gentle Smile", [] (PrimeqProcessor& p) { p.resetAllBands(); p.setBand (0, band (BandType::LowShelf, 60, 1.2, 0.707)); p.setBand (1, band (BandType::Bell, 350, -1.0, 0.8)); p.setBand (2, band (BandType::HighShelf, 12000, 1.5, 0.707)); } },
         { "Low Cut 30 Hz (48 dB/oct)", [] (PrimeqProcessor& p) { p.resetAllBands(); p.setBand (0, band (BandType::HighPass, 30, 0, 0.707, 5)); } },
         { "Dynamic De-Mud (280 Hz)", [] (PrimeqProcessor& p) { p.resetAllBands(); auto b = band (BandType::Bell, 280, 0, 1.4); b.dyn = true; b.thr = -28; b.range = -4; b.ratio = 2.5; b.attackMs = 15; b.releaseMs = 150; p.setBand (0, b); } },
+        { "Bass - Tighten & Clarity", [] (PrimeqProcessor& p) { p.resetAllBands(); p.setBand (0, band (BandType::HighPass, 30, 0, 0.707, 4)); p.setBand (1, band (BandType::Bell, 250, -2.0, 1.4)); p.setBand (2, band (BandType::Bell, 900, 1.5, 1.0)); } },
+        { "Kick - Punch & Carve", [] (PrimeqProcessor& p) { p.resetAllBands(); p.setBand (0, band (BandType::HighPass, 28, 0, 0.707, 3)); p.setBand (1, band (BandType::Bell, 60, 2.5, 1.2)); p.setBand (2, band (BandType::Bell, 350, -3.5, 1.5)); p.setBand (3, band (BandType::Bell, 4500, 2.0, 1.0)); } },
+        { "Vocal - De-Mud + Air", [] (PrimeqProcessor& p) { p.resetAllBands(); p.setBand (0, band (BandType::HighPass, 90, 0, 0.707, 3)); p.setBand (1, band (BandType::Bell, 250, -2.5, 1.1)); p.setBand (2, band (BandType::HighShelf, 11000, 2.5, 0.707)); } },
+        { "Master - Warm Glue (Character Subtle)", [] (PrimeqProcessor& p) { p.resetAllBands(); p.resetFx(); p.setBand (0, band (BandType::LowShelf, 70, 1.0, 0.707)); p.setBand (1, band (BandType::HighShelf, 12000, 1.2, 0.707));
+            p.setParamReal ("ch_mode", 2.f); p.setParamReal ("ch_drive", 35.f); p.setParamReal ("ch_mix", 60.f); p.setParamReal ("ch_os", 2.f); } },
+        { "Harsh Vocal Tamer (De-harsh)", [] (PrimeqProcessor& p) { p.resetAllBands(); p.resetFx(); p.setBand (0, band (BandType::HighPass, 80, 0, 0.707, 3));
+            p.setParamReal ("dh_on", 1.f); p.setParamReal ("dh_amount", 55.f); p.setParamReal ("dh_lo", 2500.f); p.setParamReal ("dh_hi", 9000.f); p.setParamReal ("dh_sens", 4.f); } },
         { "Dynamic De-Ess (7 kHz)", [] (PrimeqProcessor& p) { p.resetAllBands(); auto b = band (BandType::Bell, 7000, 0, 3.0); b.dyn = true; b.thr = -35; b.range = -6; b.ratio = 4; b.attackMs = 1; b.releaseMs = 60; b.det = DetMode::Peak; p.setBand (0, b); } },
     };
     return v;
@@ -396,22 +568,34 @@ const std::vector<PrimeqProcessor::FactoryPreset>& PrimeqProcessor::factoryPrese
 void PrimeqProcessor::loadFactoryPreset (int idx)
 {
     const auto& v = factoryPresets(); if (idx < 0 || idx >= (int) v.size()) return;
-    undo.beginNewTransaction (v[(size_t) idx].name); v[(size_t) idx].apply (*this);
+    undo.beginNewTransaction (v[(size_t) idx].name); resetFx(); v[(size_t) idx].apply (*this);
 }
 
 // ------------------------------------------------------------------------------------------ Smart Ops (aplicar / reverter)
-int PrimeqProcessor::smartApply (const std::vector<DeresProposal>& props)
+int PrimeqProcessor::smartApply (const std::vector<DeresProposal>& props, const char* undoName)
 {
-    undo.beginNewTransaction ("Smart Ops: Deresonate");
-    smartBackup.clear(); int created = 0, b = kNumBands - 1;
+    undo.beginNewTransaction (undoName);
+    smartBackup.clear(); smartScChanged = false; int created = 0, b = kNumBands - 1;
     BandParams cur[kNumBands]; readBands (cur);
+    bool needSc = false;
     for (const auto& pr : props)
     {
         while (b >= 0 && cur[b].on) --b;
         if (b < 0) break;
         smartBackup.push_back ({ b, cur[b] });
-        BandParams p = cur[b]; p.on = true; p.type = BandType::Bell; p.freq = pr.freq; p.gain = pr.gainDb; p.q = pr.q; p.place = Placement::Stereo; p.dyn = false;
+        BandParams p = cur[b]; p.on = true; p.type = BandType::Bell; p.freq = pr.freq; p.q = pr.q; p.place = Placement::Stereo;
+        if (pr.dynamic)
+        {
+            p.gain = 0.0; p.dyn = true; p.range = pr.gainDb; p.thr = pr.thrDb; p.ratio = pr.ratio; p.attackMs = pr.attackMs; p.releaseMs = pr.releaseMs;
+            p.holdMs = 0.0; p.kneeDb = 6.0; p.det = DetMode::Peak; p.dir = DynDir::Above; needSc = needSc || pr.needsSidechain;
+        }
+        else { p.gain = pr.gainDb; p.dyn = false; }
         setBand (b, p); cur[b].on = true; ++created; --b;
+    }
+    if (needSc && created > 0)
+    {
+        smartScOld = getParamReal ("scext"); smartScChanged = smartScOld < 0.5f;
+        if (smartScChanged) setParamReal ("scext", 1.f);
     }
     return created;
 }
@@ -419,7 +603,8 @@ void PrimeqProcessor::smartRevert()
 {
     undo.beginNewTransaction ("Smart Ops: Revert");
     for (const auto& bk : smartBackup) setBand (bk.band, bk.p);
-    smartBackup.clear();
+    if (smartScChanged) setParamReal ("scext", smartScOld);
+    smartBackup.clear(); smartScChanged = false;
 }
 
 juce::AudioProcessorEditor* PrimeqProcessor::createEditor() { return new PrimeqEditor (*this); }

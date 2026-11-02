@@ -7,6 +7,8 @@
 #include "SpectrumCalc.h"
 #include "StereoRing.h"
 #include "../SmartOps/Deresonate.h"
+#include "../SmartOps/DeEss.h"
+#include "../SmartOps/Unmask.h"
 #include <algorithm>
 #include <memory>
 
@@ -19,13 +21,14 @@ class AnalyzerEngine
 public:
     static constexpr int kHist = 32768;
 
-    AnalyzerEngine() { for (auto* h : { &pl, &pr, &ql, &qr }) h->assign ((size_t) kHist, 0.f); setFftSize (4096); }
+    AnalyzerEngine() { for (auto* h : { &pl, &pr, &ql, &qr, &sl, &sr2 }) h->assign ((size_t) kHist, 0.f); setFftSize (4096); }
 
-    void prepare (double sr) { fs = sr; for (auto* h : { &pl, &pr, &ql, &qr }) std::fill (h->begin(), h->end(), 0.f); hw = 0; resetDisplay(); }
+    void prepare (double sr) { fs = sr; for (auto* h : { &pl, &pr, &ql, &qr, &sl, &sr2 }) std::fill (h->begin(), h->end(), 0.f); hw = 0; hws = 0; resetDisplay(); }
 
     // ---- thread de audio
     void pushPre  (const float* a, const float* b, int n) noexcept { pre.push (a, b, n); }
     void pushPost (const float* a, const float* b, int n) noexcept { post.push (a, b, n); }
+    void pushSc   (const float* a, const float* b, int n) noexcept { sc.push (a, b, n); }
 
     // ---- thread da GUI
     void setFftSize (int n) { if (n == fftN) return; fftN = n; calc.setSize (n); bins = calc.numBins(); resetDisplay(); }
@@ -43,6 +46,7 @@ public:
         int n; bool any = false;
         while ((n = pre.pull (ta.data(), tb.data(), 4096)) > 0)  { append (pl, pr, ta.data(), tb.data(), n); any = true; learnFeed (n); }
         while ((n = post.pull (ta.data(), tb.data(), 4096)) > 0) { appendPost (ta.data(), tb.data(), n); }
+        while ((n = sc.pull (ta.data(), tb.data(), 4096)) > 0) { for (int i = 0; i < n; ++i) { sl[(size_t) hws] = ta[(size_t) i]; sr2[(size_t) hws] = tb[(size_t) i]; hws = (hws + 1) % kHist; } learnFeedSc (n); }
         if (freeze) return;
         (void) any;
         compute (pl, pr, view, dispPre);
@@ -51,10 +55,12 @@ public:
     }
 
     // ---- Smart Ops: captura do espectro medio da ENTRADA
-    void learnStart() { deres.begin (4097, fs); learning = true; sinceLast = 0; }
+    void learnStart() { deres.begin (4097, fs); deess.begin (fs); unmask.begin (fs); learning = true; sinceLast = 0; sinceLastSc = 0; }
     void learnStop() { learning = false; }
     bool isLearning() const { return learning; }
     Deresonate& deresonate() { return deres; }
+    DeEss& deEss() { return deess; }
+    Unmask& unmaskEngine() { return unmask; }
 
 private:
     void resetDisplay()
@@ -105,13 +111,26 @@ private:
             static thread_local SpectrumCalc c8 (8192);
             c8.compute (w1.data(), db.data(), pw.data());
             deres.addPower (pw.data(), 4096.0 / fs);
+            deess.feed (w1.data() + 4096, 4096); unmask.feedMain (w1.data() + 4096, 4096);   // ultimos 4096 = fluxo contiguo
+        }
+    }
+    void learnFeedSc (int n)
+    {
+        if (! learning) return;
+        sinceLastSc += n;
+        while (sinceLastSc >= 4096)
+        {
+            sinceLastSc -= 4096;
+            static thread_local std::vector<float> m4; m4.resize (4096);
+            for (int i = 0; i < 4096; ++i) { const size_t k = (size_t) ((hws - 4096 + i + 2 * kHist) % kHist); m4[(size_t) i] = 0.5f * (sl[k] + sr2[k]); }
+            unmask.feedSide (m4.data(), 4096);
         }
     }
 
-    StereoRing pre, post;
-    std::vector<float> pl, pr, ql, qr; int hw = 0, hwq = 0;
+    StereoRing pre, post, sc;
+    std::vector<float> pl, pr, ql, qr, sl, sr2; int hw = 0, hwq = 0, hws = 0, sinceLastSc = 0;
     double fs = 48000; int fftN = 4096, bins = 2049; SpectrumCalc calc { 4096 };
     std::vector<float> dispPre, dispPost, peak, tmpDb, tmpDb2, win, win2;
-    Deresonate deres; bool learning = false; int sinceLast = 0;
+    Deresonate deres; DeEss deess; Unmask unmask; bool learning = false; int sinceLast = 0;
 };
 } // namespace pq
