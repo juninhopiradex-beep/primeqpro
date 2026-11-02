@@ -1,0 +1,7 @@
+PRIMEQ pro by Piradex — Licenca de utilizacao
+(c) 2026 Beatfreak Music / Piradex Audio Plugins. Todos os direitos reservados.
+
+Este software e licenciado, nao vendido. A utilizacao esta sujeita a validacao de acesso (senha de licenca)
+e aos termos comerciais da Beatfreak Music (https://www.beatfreakstudio.com). E proibido copiar, redistribuir,
+fazer engenharia inversa ou contornar a validacao de acesso. O software e fornecido "tal como esta", sem garantias.
+Suporte: juninhopiradex@hotmail.com

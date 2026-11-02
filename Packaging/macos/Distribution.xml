@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>PRIMEQ pro by Piradex</title>
+    <organization>com.beatfreak</organization>
+    <welcome file="welcome.html" mime-type="text/html"/>
+    <license file="license.txt" mime-type="text/plain"/>
+    <options customize="always" require-scripts="false" rootVolumeOnly="true" hostArchitectures="x86_64,arm64"/>
+
+    <choices-outline>
+        <line choice="vst3"/>
+        <line choice="au"/>
+    </choices-outline>
+
+    <choice id="vst3" title="VST3" description="Instala PRIMEQ pro by Piradex.vst3 em /Library/Audio/Plug-Ins/VST3">
+        <pkg-ref id="com.beatfreak.primeqpro.vst3"/>
+    </choice>
+    <choice id="au" title="Audio Unit (AU)" description="Instala PRIMEQ pro by Piradex.component em /Library/Audio/Plug-Ins/Components">
+        <pkg-ref id="com.beatfreak.primeqpro.au"/>
+    </choice>
+
+    <pkg-ref id="com.beatfreak.primeqpro.vst3" version="1.0.0" onConclusion="none">vst3.pkg</pkg-ref>
+    <pkg-ref id="com.beatfreak.primeqpro.au"   version="1.0.0" onConclusion="none">au.pkg</pkg-ref>
+</installer-gui-script>

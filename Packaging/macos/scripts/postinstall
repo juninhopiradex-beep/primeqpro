@@ -1,0 +1,6 @@
+#!/bin/bash
+# PRIMEQ pro — pos-instalacao: remover a quarentena dos bundles instalados
+# (plugin nao assinado/notarizado: evita o aviso do Gatekeeper ao abrir no DAW)
+xattr -cr "/Library/Audio/Plug-Ins/VST3/PRIMEQ pro by Piradex.vst3"            2>/dev/null || true
+xattr -cr "/Library/Audio/Plug-Ins/Components/PRIMEQ pro by Piradex.component" 2>/dev/null || true
+exit 0

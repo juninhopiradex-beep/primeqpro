@@ -1,0 +1,9 @@
+build/
+build-*/
+dist/
+*.o
+.DS_Store
+__pycache__/
+# segredos locais (as senhas em claro NUNCA vao para o GitHub)
+PRIVADO_senhas_*.txt
+secrets.b64
