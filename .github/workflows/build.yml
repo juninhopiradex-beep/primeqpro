@@ -23,7 +23,7 @@ jobs:
       - name: Dependencias JUCE (Linux)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libfreetype-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libgl1-mesa-dev xvfb
+          sudo apt-get install -y libasound2-dev libfreetype-dev libfontconfig1-dev libcurl4-openssl-dev libwebkit2gtk-4.1-dev libgtk-3-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libgl1-mesa-dev xvfb
       - name: Configurar
         run: cmake -B build-tests -DPQ_BUILD_TESTS=ON -DPQ_BUILD_SMOKE=ON -DPQ_ENABLE_LTO=OFF -DCMAKE_BUILD_TYPE=Release
       - name: Compilar
