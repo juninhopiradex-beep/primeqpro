@@ -300,16 +300,16 @@ int main()
     }
     // 17) Mix Unmask ponta-a-ponta: 3 instancias reais (Kick, Bass, Vocals) -> registo -> analise -> aplicar via correio -> imagem
     {
-        auto pk = make (fs, bs), pb = make (fs, bs), pv = make (fs, bs);
+        auto pk = make (fs, bs), pb = make (fs, bs), pv = make (fs, bs), pg = make (fs, bs); pg->setTrackName ("Guitar"); pb->uiMode = 2;
         pk->setTrackName ("Kick"); pb->setTrackName ("Bass"); pv->setTrackName ("Vocals");
         auto& reg = pq::MixRegistry::get();
         CHECK (reg.priority (pk->mixSlot()) == 4 && reg.priority (pb->mixSlot()) == 3 && reg.priority (pv->mixSlot()) == 5, "Mix Unmask: prioridades sugeridas pelo nome (Kick 4, Bass 3, Vocals 5)");
-        for (auto* q : { pk.get(), pb.get(), pv.get() }) reg.setAnalysing (q->mixSlot(), true, fs);
+        for (auto* q : { pk.get(), pb.get(), pv.get(), pg.get() }) reg.setAnalysing (q->mixSlot(), true, fs);
         std::mt19937 rng (5); std::normal_distribution<float> nd (0, 1.f);
         const int total = (int) (fs * 12);
         for (int off = 0; off < total; off += bs)
         {
-            juce::AudioBuffer<float> bk (2, bs), bb (2, bs), bv (2, bs); juce::MidiBuffer m;
+            juce::AudioBuffer<float> bk (2, bs), bb (2, bs), bv (2, bs), bg (2, bs); juce::MidiBuffer m;
             for (int i = 0; i < bs; ++i)
             {
                 const double t = (double) (off + i) / fs; const double ph = std::fmod (t, 0.5);
@@ -317,13 +317,13 @@ int main()
                 const float kick2 = ph < 0.09 ? (float) (0.5 * std::exp (-ph * 25.0) * std::sin (2 * M_PI * 96.0 * ph)) : 0.f; (void) kick;
                 const float bass = (float) (0.28 * std::sin (2 * M_PI * 96.0 * t) + 0.12 * std::sin (2 * M_PI * 130.0 * t));
                 const float vox = (float) ((0.16 + 0.04 * std::sin (2 * M_PI * 3.0 * t)) * (std::sin (2 * M_PI * 400.0 * t) + 0.6 * std::sin (2 * M_PI * 1200.0 * t) + 0.3 * std::sin (2 * M_PI * 2600.0 * t))) + 0.002f * nd (rng);
-                for (int c = 0; c < 2; ++c) { bk.setSample (c, i, kick2); bb.setSample (c, i, bass); bv.setSample (c, i, vox); }
+                for (int c = 0; c < 2; ++c) { bk.setSample (c, i, kick2); bb.setSample (c, i, bass); bv.setSample (c, i, vox); const double phs = c == 0 ? 0.0 : 1.0; bg.setSample (c, i, (float) (0.10 * (std::sin (2 * M_PI * 500.0 * t + phs) + 0.7 * std::sin (2 * M_PI * 1500.0 * t + phs)))); }
             }
-            pk->processBlock (bk, m); pb->processBlock (bb, m); pv->processBlock (bv, m);
+            pk->processBlock (bk, m); pb->processBlock (bb, m); pv->processBlock (bv, m); pg->processBlock (bg, m);
         }
         std::unique_ptr<juce::AudioProcessorEditor> ed (pb->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860);
         pe->showMix (true); pe->getMix().analyse(); const auto& R = pe->getMix().result();
-        const pq::MixPair* kb = nullptr; for (auto& pr : R.pairs) if (R.curve.size() == 3 && pr.victimIdx >= 0 && ! pr.conflicts.empty() && pr.conflicts[0].freq < 160) { kb = &pr; break; }
+        const pq::MixPair* kb = nullptr; for (auto& pr : R.pairs) if (R.curve.size() == 4 && pr.victimIdx >= 0 && ! pr.conflicts.empty() && pr.conflicts[0].freq < 160) { kb = &pr; break; }
         INFO ("Mix Unmask real: %d pares; %s", (int) R.pairs.size(), R.message.c_str());
         CHECK (kb != nullptr, "Mix Unmask: conflito de graves detetado entre as instancias reais (kick/bass)");
         if (kb)
@@ -340,6 +340,26 @@ int main()
         }
         pq::MixMail m1; m1.undoName = "Mix Unmask"; pq::DeresProposal dp; dp.freq = 110; dp.q = 3; dp.gainDb = -3; m1.props = { dp }; reg.post (pb->mixSlot(), m1);
         pb->pollMixMail(); CHECK (pb->getBand (0).on || pb->getBand (1).on || pb->smartCanRevert(), "Mix Unmask: correio entre instancias aplicado na pista alvo");
+        {
+            auto& mp = pe->getMix(); const auto& SP = mp.spaceResult();
+            INFO ("Espaco: %d achados", (int) SP.findings.size()); for (auto& f : SP.findings) INFO ("  - %s", f.text.c_str());
+            CHECK (R.curve.size() == 4, "Assistente: 4 pistas analisadas (grupo G1)");
+            bool crowd = false; for (auto& f : SP.findings) if (f.kind == pq::SpaceFinding::CenterCrowd || f.kind == pq::SpaceFinding::MidCut) crowd = true;
+            CHECK (crowd, "Espaco: vocais e guitarra centrados => achado espacial real a partir de audio");
+            mp.setSymptom (0); CHECK (! mp.doctor().evidence.empty(), "Mix Doctor (audio real): %d evidencias, %d hipoteses", (int) mp.doctor().evidence.size(), (int) mp.doctor().hyps.size());
+            mp.setIntent (0, 1, 60); CHECK (! mp.intentPlan().props.empty() && ! mp.intentPlan().explanation.empty(), "Intent Clarity: plano com explicacao");
+            const int nI = pb->smartApply (mp.intentPlan().props, "Intent EQ"); CHECK (nI >= 2, "Intent: %d bandas normais criadas", nI); pb->smartRevert();
+            CHECK (mp.buildReport().contains ("Masking") && mp.buildReport().contains ("Limitacoes"), "Relatorio gerado (%d caracteres)", (int) mp.buildReport().length());
+            const char* nm[5] = { "mask", "space", "doctor", "intent", "scen" };
+            for (int t = 0; t < 5; ++t)
+            {
+                if (t == 4 && mp.consequences().sc.size() != 4) continue; mp.setTab (t); if (t == 3) mp.setIntent (0, 1, 60); if (t == 2) mp.setSymptom (0);
+                auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f (juce::String ("assist_") + nm[t] + ".png"); f.deleteFile(); juce::FileOutputStream fs2 (f); juce::PNGImageFormat().writeImageToStream (im, fs2);
+                CHECK (f.getSize() > 15000, "separador %s renderizado (%lld bytes)", nm[t], (long long) f.getSize());
+            }
+            for (int md = 0; md < 3; ++md) { pb->uiMode = md; mp.setTab (0); pe->resized(); }
+            pb->uiMode = 2; mp.setTab (0);
+        }
         pe->resized(); auto img = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f);
         juce::File out ("mix_unmask.png"); out.deleteFile(); juce::FileOutputStream fo (out); juce::PNGImageFormat().writeImageToStream (img, fo);
         CHECK (out.getSize() > 20000, "pagina Mix Unmask renderizada (%lld bytes)", (long long) out.getSize());

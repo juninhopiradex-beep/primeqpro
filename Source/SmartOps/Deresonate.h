@@ -8,6 +8,7 @@
 //  sao tratados como ressonancias; material muito curto ou com pouca energia gera propostas pouco fiaveis.
 // =============================================================================
 #pragma once
+#include <string>
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -20,6 +21,8 @@ struct DeresProposal
     double freq = 0, gainDb = 0, q = 4, excessDb = 0;
     bool dynamic = false, needsSidechain = false;
     double thrDb = -30, ratio = 2, attackMs = 10, releaseMs = 100;
+    int type = 0, place = 0;          // BandType (0 = Bell) e Placement (0 = Stereo, 3 = Mid, 4 = Side)
+    std::string why;                  // explicacao curta mostrada ao utilizador
 };
 
 class Deresonate

@@ -174,7 +174,7 @@ void PrimeqProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         for (auto& c : conv) { c.prepare (spec); c.reset(); }
         firValid.store (false); firCross.store (false); lastKey.clear(); firFs.store ((int) sr);
         analyzer.prepare (sr);
-        deharsh.prepare (sr); character.prepare (sr); mixMeter.prepare (sr); pq::MixRegistry::get().setAnalysing (mixSlotId, pq::MixRegistry::get().analysing (mixSlotId), sr); mixWas = false;
+        deharsh.prepare (sr); character.prepare (sr); mixMeter.prepare (sr); rmsPreE = rmsPostE = 0; pq::MixRegistry::get().setAnalysing (mixSlotId, pq::MixRegistry::get().analysing (mixSlotId), sr); mixWas = false;
         lkL.assign ((size_t) kLookRing, 0.0); lkR.assign ((size_t) kLookRing, 0.0); uL.assign ((size_t) kChunk, 0.0); uR.assign ((size_t) kChunk, 0.0); lkW = 0;
         for (auto& v : scBuf) v.assign ((size_t) kChunk, 0.f);
         fadeGain = fadeTarget = 1.f; path = 0; primeLeft = 0; bypState = pBypass->load() > 0.5f ? 1.f : 0.f; gainState = 1.f; agState = 0.f;
@@ -315,7 +315,7 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         if (mixSlotId >= 0 && pq::MixRegistry::get().analysing (mixSlotId))      // Mix Unmask (opt-in): niveis por banda a cada 25 ms
         {
             if (! mixWas) { mixMeter.reset(); mixWas = true; }
-            mixMeter.process (pL.data(), pR.data(), m, [this] (const float* db, float all) { pq::MixRegistry::get().pushFrame (mixSlotId, db, all); });
+            mixMeter.process (pL.data(), pR.data(), m, [this] (const float* db, float all) { pq::MixRegistry::get().pushFrame (mixSlotId, db, all); pq::SpatialStats st; mixMeter.stats (st); pq::MixRegistry::get().pushStats (mixSlotId, st); });
         }
         else mixWas = false;
 
@@ -397,6 +397,11 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         }
         dryW = (dryW + m) & (kDryCap - 1);
         analyzer.pushPost (oL.data(), oR.data(), m);
+        {
+            double sp = 0, so = 0; for (int i = 0; i < m; ++i) { sp += (double) pL[(size_t) i] * pL[(size_t) i] + (double) pR[(size_t) i] * pR[(size_t) i]; so += (double) oL[(size_t) i] * oL[(size_t) i] + (double) oR[(size_t) i] * oR[(size_t) i]; }
+            const double k = 1.0 - std::exp (-(double) m / (1.5 * sr)); rmsPreE += k * (sp / m - rmsPreE); rmsPostE += k * (so / m - rmsPostE);
+            if (rmsPreE > 1e-10 && rmsPostE > 1e-10) loudDeltaDb.store ((float) (10.0 * std::log10 (rmsPostE / rmsPreE)), std::memory_order_relaxed);
+        }
     }
     atomicMax (meterL, pkL); atomicMax (meterR, wr ? pkR : pkL);
     for (int b = 0; b < kNumBands; ++b) dynTel[(size_t) b].store ((float) core.dynDb (b), std::memory_order_relaxed);
@@ -442,7 +447,7 @@ void PrimeqProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
     auto st = apvts.copyState(); st.setProperty (kStateVersionKey, kStateVersion, nullptr);
     juce::XmlElement root ("PRIMEQPRO");
-    root.setAttribute ("uiW", uiWidth); root.setAttribute ("uiH", uiHeight); root.setAttribute ("slot", slot);
+    root.setAttribute ("uiW", uiWidth); root.setAttribute ("uiH", uiHeight); root.setAttribute ("slot", slot); root.setAttribute ("mode", uiMode); root.setAttribute ("mixGroup", pq::MixRegistry::get().group (mixSlotId));
     { auto& rg = pq::MixRegistry::get(); root.setAttribute ("mixName", juce::String (rg.name (mixSlotId))); root.setAttribute ("mixPri", rg.priority (mixSlotId)); root.setAttribute ("mixOn", rg.analysing (mixSlotId) ? 1 : 0); root.setAttribute ("mixUser", nameByUser ? 1 : 0); }
     if (auto x = st.createXml()) root.addChildElement (x.release());
     for (int i = 0; i < 2; ++i) if (slots[i].isValid()) { auto* e = new juce::XmlElement ("AB"); e->setAttribute ("i", i); if (auto x = slots[i].createXml()) e->addChildElement (x.release()); root.addChildElement (e); }
@@ -477,7 +482,7 @@ void PrimeqProcessor::setStateInformation (const void* data, int size)
     if (xml->hasTagName ("PRIMEQPRO"))
     {
         uiWidth = std::clamp (xml->getIntAttribute ("uiW", uiWidth), 760, 3000); uiHeight = std::clamp (xml->getIntAttribute ("uiH", uiHeight), 480, 2000);
-        slot = xml->getIntAttribute ("slot", 0) & 1;
+        slot = xml->getIntAttribute ("slot", 0) & 1; uiMode = std::clamp (xml->getIntAttribute ("mode", 1), 0, 2); pq::MixRegistry::get().setGroup (mixSlotId, xml->getIntAttribute ("mixGroup", 1));
         if (xml->hasAttribute ("mixName")) { auto& rg = pq::MixRegistry::get(); nameByUser = xml->getIntAttribute ("mixUser", 0) != 0; if (nameByUser) rg.setName (mixSlotId, xml->getStringAttribute ("mixName").toStdString()); rg.setPriority (mixSlotId, xml->getIntAttribute ("mixPri", 2)); rg.setAnalysing (mixSlotId, xml->getIntAttribute ("mixOn", 0) != 0, sr); }
         for (auto* e : xml->getChildWithTagNameIterator ("AB")) if (auto* c = e->getFirstChildElement()) slots[e->getIntAttribute ("i") & 1] = juce::ValueTree::fromXml (*c);
         {
@@ -583,7 +588,7 @@ int PrimeqProcessor::smartApply (const std::vector<DeresProposal>& props, const 
         while (b >= 0 && cur[b].on) --b;
         if (b < 0) break;
         smartBackup.push_back ({ b, cur[b] });
-        BandParams p = cur[b]; p.on = true; p.type = BandType::Bell; p.freq = pr.freq; p.q = pr.q; p.place = Placement::Stereo;
+        BandParams p = cur[b]; p.on = true; p.type = (BandType) std::clamp (pr.type, 0, 7); p.freq = pr.freq; p.q = pr.q; p.place = (Placement) std::clamp (pr.place, 0, 4);
         if (pr.dynamic)
         {
             p.gain = 0.0; p.dyn = true; p.range = pr.gainDb; p.thr = pr.thrDb; p.ratio = pr.ratio; p.attackMs = pr.attackMs; p.releaseMs = pr.releaseMs;

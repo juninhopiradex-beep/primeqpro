@@ -512,16 +512,17 @@ public:
     void resized() override;
     EqGraph& getGraph() { return graph; }
     void selectBand (int b) { graph.select (b); }
-    void showMix (bool s) { mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip, &fx }) c->setVisible (! s); if (s) smart.setVisible (false); else smart.setVisible (smartBtn.getToggleState()); resized(); }
+    void showMix (bool s) { mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip }) c->setVisible (! s); fx.setVisible (! s && proc.uiMode != 0); if (s) smart.setVisible (false); else smart.setVisible (smartBtn.getToggleState()); resized(); }
     MixPanel& getMix() { return mix; }
     void showSmart (bool s) { smartBtn.setToggleState (s, juce::dontSendNotification); smart.setVisible (s && ! mix.isVisible()); resized(); }
 private:
     void timerCallback() override;
+    void applyMode();
     void presetMenu();
     PrimeqProcessor& proc; pqui::Lnf lnf;
     EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; LoginOverlay login;
     juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
-    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "MIX UNMASK" }; juce::ComboBox phaseBox; juce::Label phaseLbl;
+    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;
     juce::String presetName { "Init (Flat)" }; bool wasUnlocked = true; int lastSel = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrimeqEditor)

@@ -34,7 +34,7 @@ inline int guessPriority (std::string n)
     if (has ("bass") || has ("baixo") || has ("sub")) return 3;
     return 2;
 }
-struct MixTrack { std::string name; int priority = 2; std::vector<std::array<float, kMixBands>> frames; };
+struct MixTrack { std::string name; int priority = 2; std::vector<std::array<float, kMixBands>> frames; SpatialStats st; };
 struct MixScore { double benefit = 0, collateral = 0, score = 0; };
 enum class MixMethod { Eq = 0, Dynamic, Sidechain };
 struct MixConflict
@@ -89,8 +89,10 @@ inline MixResult analyseMix (const std::vector<MixTrack>& tr, double minConflict
             const auto& fp = tr[P].frames; const auto& fv = tr[V].frames; const int op = (int) fp.size() - K, ov = (int) fv.size() - K;
             struct Cand { int b; double S, overlap; };
             std::vector<Cand> cands; std::vector<double> S ((size_t) kMixBands, 0.0), ovl ((size_t) kMixBands, 0.0);
+            double pkP = -120, pkV = -120; for (int b = 0; b < kMixBands; ++b) { pkP = std::max (pkP, R.curve[P][(size_t) b]); pkV = std::max (pkV, R.curve[V][(size_t) b]); }
             for (int b = 0; b < kMixBands; ++b)
             {
+                if (R.curve[P][(size_t) b] < pkP - 30.0 || R.curve[V][(size_t) b] < pkV - 30.0) continue;      // ignora zonas onde uma das pistas esta 30 dB abaixo do seu proprio pico (fugas do filtro, nao conteudo)
                 double sum = 0; int nAny = 0, nBoth = 0;
                 for (int t = 0; t < K; ++t)
                 {
@@ -135,7 +137,7 @@ inline MixResult analyseMix (const std::vector<MixTrack>& tr, double minConflict
                         bool cut = false;
                         if (method == 0) cut = aV[(size_t) t];
                         else if (method == 1) cut = aV[(size_t) t] && vArr[(size_t) t] > thV;
-                        else cut = aV[(size_t) t] && aP[(size_t) t] && pArr[(size_t) t] > thP;
+                        else cut = aV[(size_t) t] && aP[(size_t) t] && pArr[(size_t) t] >= thP;
                         before += dep[(size_t) t];
                         if (aP[(size_t) t] && aV[(size_t) t]) after += std::min (15.0, std::max (0.0, (vArr[(size_t) t] - (cut ? c.cutDb : 0.0)) - (pArr[(size_t) t] - kMargin)));
                         if (cut && dep[(size_t) t] <= 0.0) ++unnecessary;

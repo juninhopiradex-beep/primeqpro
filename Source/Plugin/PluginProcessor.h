@@ -99,7 +99,9 @@ public:
     std::array<std::atomic<float>, pq::kNumBands> dynTel {};
     std::atomic<float> meterL { 0.f }, meterR { 0.f }, cpuLoad { 0.f };
     std::atomic<int> listenBand { -1 };
-    std::atomic<float> dhRedDb { 0.f };                              // reducao maxima atual do De-harsh (dB, <= 0)
+    std::atomic<float> dhRedDb { 0.f };
+    std::atomic<float> loudDeltaDb { 0.f };                          // nivel RMS pos - pre (media ~1.5 s), para A/B a loudness igualado
+    int uiMode = 1;                                                  // 0 Simple, 1 Advanced, 2 Expert                              // reducao maxima atual do De-harsh (dB, <= 0)
     int  latencyFor (int phaseIdx) const;                            // so a parte da fase (compat.)
     int  declaredLatency() const;                                    // soma de todas as etapas ativas segundo os parametros
     void updateLatency();
@@ -129,7 +131,7 @@ private:
     int  stageLatency (const Stage& s) const;
     void resetChain();
     void applyMorph (pq::BandParams* io) const;
-    pq::DeHarsh deharsh; pq::Character character;
+    pq::DeHarsh deharsh; pq::Character character; double rmsPreE = 0, rmsPostE = 0;
     struct MixTimer : juce::Timer { explicit MixTimer (PrimeqProcessor& o) : owner (o) {} void timerCallback() override { owner.pollMixMail(); } PrimeqProcessor& owner; };
     MixTimer mixTimer { *this }; int mixSlotId = -1; pq::MixMeter mixMeter; bool mixWas = false, nameByUser = false;
     static constexpr int kLookRing = 1 << 14;

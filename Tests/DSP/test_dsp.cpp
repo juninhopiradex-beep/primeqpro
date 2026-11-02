@@ -13,7 +13,7 @@
 #include "../../Source/DSP/DeHarsh.h"
 #include "../../Source/DSP/MixMeter.h"
 #include "../../Source/Plugin/MixRegistry.h"
-#include "../../Source/SmartOps/MixAnalysis.h"
+#include "../../Source/SmartOps/Consequence.h"
 #include "../../Source/Shared/Units.h"
 #include <chrono>
 #include <cstdio>
@@ -440,6 +440,58 @@ int main()
         CHECK (eqBest, "Mix Unmask: Vocal vs Pad, ambos continuos na mesma zona => melhor metodo = EQ estatico (colateral %.0f%%)", eqBest ? 100 * res2.pairs[0].conflicts[0].eq.collateral : -1.0);
         CHECK (res2.pairs[0].protectedIdx == 0, "Mix Unmask: a pista de maior prioridade (Vocals) e a protegida");
         MixTrack few = kick; few.frames.resize (20); auto res3 = analyseMix ({ few, bass }, 1.5, 3); CHECK (res3.pairs.empty() && ! res3.message.empty(), "Mix Unmask: poucos dados => aviso em vez de resultado");
+    }
+    // 20) Assistente EQNOVA: MixMeter espacial, Spatial, Mix Doctor, Intent, Consequence
+    {
+        MixMeter mm; mm.prepare (FS); std::vector<float> L (96000), R (96000);
+        for (size_t i = 0; i < L.size(); ++i) { const double t = (double) i / FS; L[i] = (float) (0.4 * std::sin (2 * M_PI * 1000 * t)); R[i] = (float) (0.1 * std::sin (2 * M_PI * 1000 * t)); }
+        mm.process (L.data(), R.data(), (int) L.size(), [] (const float*, float) {}); SpatialStats st; mm.stats (st);
+        int bm = 0; for (int b = 0; b < kMixBands; ++b) if (std::fabs (mixBandFreq (b) - 1000) < std::fabs (mixBandFreq (bm) - 1000)) bm = b;
+        CHECK (std::fabs (st.pan[bm] + 0.6f) < 0.05f && st.corr[bm] > 0.98f && st.corrAll > 0.98f, "SpatialMeter: L=0.4 R=0.1 => pan %.2f (esperado -0.60), correlacao %.2f", (double) st.pan[bm], (double) st.corr[bm]);
+        mm.reset(); for (size_t i = 0; i < L.size(); ++i) R[i] = -L[i]; mm.process (L.data(), R.data(), (int) L.size(), [] (const float*, float) {}); mm.stats (st);
+        CHECK (st.corrAll < -0.98f && st.monoLossAll < -30.f, "SpatialMeter: sinal em oposicao de fase => corr %.2f, perda mono %.0f dB", (double) st.corrAll, (double) st.monoLossAll);
+    }
+    {
+        auto bandOf = [] (double f) { int best = 0; for (int b = 0; b < kMixBands; ++b) if (std::fabs (std::log (mixBandFreq (b) / f)) < std::fabs (std::log (mixBandFreq (best) / f))) best = b; return best; };
+        std::mt19937 rng (11); std::uniform_real_distribution<float> rip (-1.0f, 1.0f);
+        auto mk = [&] (const char* n, int pri, double f0, double f1, float lvl, bool burst, float pan, float corr, float crest) {
+            MixTrack t; t.name = n; t.priority = pri; const int b0 = bandOf (f0), b1 = bandOf (f1);
+            for (int k = 0; k < 480; ++k) { std::array<float, kMixBands> fr; fr.fill (-120.f); const bool hit = (k % 20) < 3; for (int b = b0; b <= b1; ++b) fr[(size_t) b] = burst ? (hit ? lvl : -75.f) : lvl + rip (rng); t.frames.push_back (fr); }
+            for (int b = 0; b < kMixBands; ++b) { t.st.pan[b] = pan; t.st.corr[b] = corr; t.st.monoLoss[b] = corr < 0.3f ? -6.f : -0.5f; } t.st.corrAll = corr; t.st.monoLossAll = corr < 0.3f ? -6.f : -0.5f; t.st.rmsDb = lvl - 6; t.st.crestDb = crest; return t; };
+        MixTrack kick = mk ("Kick", 4, 60, 110, -6, true, 0, 0.99f, 14), bass = mk ("Bass", 3, 80, 130, -9, false, 0, 0.99f, 5), vox = mk ("Vocals", 5, 300, 3000, -14, false, 0, 0.99f, 9), gtr = mk ("Guitar", 2, 300, 3000, -15, false, 0, 0.99f, 8);
+        std::vector<MixTrack> T { kick, bass, vox, gtr }; auto res = analyseMix (T, 1.5, 3); auto sp = analyseSpace (T, res);
+        bool crowd = false, pan = false; for (auto& f : sp.findings) if (f.kind == SpaceFinding::CenterCrowd) { crowd = true; if (T[(size_t) f.track].name == "Guitar" && f.text.find ("Pan candidato") != std::string::npos) pan = true; }
+        CHECK (crowd && pan, "Spatial: Vocals e Guitar centrados na mesma zona => centro congestionado, pan candidato = Guitar (a de menor prioridade)");
+        CHECK (sp.kind.size() == 4 && sp.kind[0] == SrcKind::Mono, "Spatial: tipo de fonte (Kick = %s)", srcKindName (sp.kind[0]));
+        MixTrack wide = mk ("Pad", 2, 80, 200, -12, false, 0, 0.05f, 6); std::vector<MixTrack> T2 { wide, vox }; auto r2 = analyseMix (T2, 1.5, 3); auto s2 = analyseSpace (T2, r2);
+        bool mono = false; for (auto& f : s2.findings) if (f.kind == SpaceFinding::MonoRisk && ! f.props.empty() && f.props[0].place == 4 && f.props[0].type == 3) mono = true;
+        CHECK (mono, "Spatial: graves com correlacao 0.05 => risco mono + proposta HP no Side");
+        MixTrack stV = mk ("Synth", 2, 300, 3000, -13, false, 0, 0.6f, 8); std::vector<MixTrack> T3 { vox, stV }; auto r3 = analyseMix (T3, 1.5, 3); auto s3 = analyseSpace (T3, r3);
+        bool mid = false; for (auto& f : s3.findings) if (f.kind == SpaceFinding::MidCut && f.props[0].place == 3) mid = true;
+        CHECK (mid, "Spatial: vitima estereo (corr 0.6) => proposta de corte so no Mid");
+        auto dv = diagnose (Symptom::VocalUnclear, T, res, sp); bool ev = false, hy = false;
+        for (auto& e : dv.evidence) if (e.find ("%") != std::string::npos && e.find ("Vocals") != std::string::npos) ev = true; for (auto& h : dv.hyps) if (h.text.find ("Masking") != std::string::npos && h.v == Verdict::Compatible) hy = true;
+        CHECK (ev && hy && ! dv.hyps.empty(), "Mix Doctor: vocal pouco inteligivel => evidencia medida + hipotese masking 'compativel com os dados' (%d hipoteses, %d acoes)", (int) dv.hyps.size(), (int) dv.actions.size());
+        auto dk = diagnose (Symptom::KickNoImpact, T, res, sp); bool kact = ! dk.actions.empty() && dk.actions[0].track == 1;
+        CHECK (kact, "Mix Doctor: kick sem impacto => acao na pista do baixo (concorrente)");
+        auto dm = diagnose (Symptom::BassMono, T2, r2, s2); CHECK (! dm.evidence.empty() && ! dm.actions.empty(), "Mix Doctor: graves somem em mono => evidencia e acao (HP no Side)");
+        for (int sy = 0; sy < 5; ++sy) { auto d = diagnose ((Symptom) sy, T, res, sp); CHECK (! d.evidence.empty() || ! d.note.empty(), "Mix Doctor: sintoma %d devolve resultado", sy); }
+        std::array<double, kMixBands> cur; for (int b = 0; b < kMixBands; ++b) cur[(size_t) b] = res.curve[2][(size_t) b];
+        auto pc = planIntent (Intent::Clarity, Role::Voice, 0.5, &cur); double d3k = pc.staticDelta[(size_t) bandOf (3000)], d300 = pc.staticDelta[(size_t) bandOf (300)];
+        CHECK (pc.props.size() == 2 && d3k > 0.3 && d300 < -0.3 && pc.measured, "Intent Clarity (Voz): %+.1f dB a 3 kHz, %+.1f dB a 300 Hz (previsao sobre a curva medida)", d3k, d300);
+        bool within = true; for (int i = 0; i < 5; ++i) for (double a : { 0.0, 0.5, 1.0 }) for (int r = 0; r < 4; ++r) { auto pl = planIntent ((Intent) i, (Role) r, a, &cur); for (auto& q : pl.props) if (std::fabs (q.gainDb) > 4.0001) within = false; if (pl.props.empty() || pl.explanation.empty()) within = false; }
+        CHECK (within, "Intent: 5 intencoes x 4 papeis x 3 intensidades => sempre propostas, explicacao e |ganho| <= 4 dB");
+        auto p0 = planIntent (Intent::Clarity, Role::Voice, 0.0, nullptr), p1 = planIntent (Intent::Clarity, Role::Voice, 1.0, nullptr); CHECK (std::fabs (p1.props[0].gainDb) > std::fabs (p0.props[0].gainDb), "Intent: a intensidade escala o ganho (%.1f -> %.1f dB)", p0.props[0].gainDb, p1.props[0].gainDb);
+        auto sm = planIntent (Intent::Smooth, Role::General, 0.5, &cur); CHECK (! sm.props.empty() && sm.props[0].dynamic, "Intent Smooth: cortes dinamicos");
+        const MixPair* kb = nullptr; for (auto& pr : res.pairs) if (pr.protectedIdx == 0 && pr.victimIdx == 1) kb = &pr;
+        CHECK (kb != nullptr, "Consequencias: par Kick->Bass encontrado");
+        if (kb)
+        {
+            auto cr = runConsequences (T[0], T[1], *kb); const auto& A = cr.sc[1]; const auto& B = cr.sc[2]; const auto& C = cr.sc[3];
+            std::printf ("INFO    Consequencias Kick->Bass: masking restante A %.0f%% B %.0f%% C %.0f%% | colateral A %.0f%% B %.0f%% C %.0f%% | nivel mix A %.2f B %.2f C %.2f dB\n", A.maskRemainPct, B.maskRemainPct, C.maskRemainPct, A.collateralPct, B.collateralPct, C.collateralPct, A.mixRmsDb, B.mixRmsDb, C.mixRmsDb);
+            CHECK (cr.sc.size() == 4 && B.collateralPct < A.collateralPct && B.maskRemainPct < 100 && A.mixRmsDb <= 0 && std::fabs (A.loudComp + A.mixRmsDb) < 1e-9, "Consequencias: sidechain tem menos corte desnecessario que EQ estatico; compensacao de loudness = inverso da variacao");
+            CHECK (! C.props.empty() && C.props.size() == 2 * kb->conflicts.size(), "Consequencias: cenario C = EQ 1/3 + sidechain 2/3 (%d propostas)", (int) C.props.size());
+        }
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;

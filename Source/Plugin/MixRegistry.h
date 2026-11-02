@@ -23,7 +23,7 @@ constexpr int kMixHist = 400;       // 400 x 25 ms = 10 s
 constexpr int kMixSlots = 32;
 
 struct MixMail { std::vector<DeresProposal> props; std::string undoName; };
-struct MixTrackInfo { int slot = -1; std::string name; int priority = 2; bool analysing = false, isSelf = false; double sampleRate = 48000; uint32_t head = 0; float lastDb = -120.f; };
+struct MixTrackInfo { int group = 1; int slot = -1; std::string name; int priority = 2; bool analysing = false, isSelf = false; double sampleRate = 48000; uint32_t head = 0; float lastDb = -120.f; };
 
 class MixRegistry
 {
@@ -36,7 +36,7 @@ public:
         for (int i = 0; i < kMixSlots; ++i)
             if (! slots[(size_t) i].used.load())
             {
-                Slot& s = slots[(size_t) i]; s.owner = owner; s.name = "Pista " + std::to_string(++counter); s.priority = 2; s.mail.clear(); s.head.store (0); s.analysing.store (false); s.hasMail.store (false); s.used.store (true);
+                Slot& s = slots[(size_t) i]; s.owner = owner; s.name = "Pista " + std::to_string(++counter); s.priority = 2; s.group.store (1); s.mail.clear(); s.head.store (0); s.analysing.store (false); s.hasMail.store (false); s.used.store (true);
                 for (auto& f : s.lv) f.store (-120.f, std::memory_order_relaxed);
                 return i;
             }
@@ -65,7 +65,7 @@ public:
         for (int i = 0; i < kMixSlots; ++i)
         {
             const Slot& s = slots[(size_t) i]; if (! s.used.load()) continue;
-            MixTrackInfo t; t.slot = i; t.name = s.name; t.priority = s.priority; t.analysing = s.analysing.load(); t.isSelf = (s.owner == self); t.sampleRate = s.sampleRate.load(); t.head = s.head.load (std::memory_order_acquire); t.lastDb = s.overall.load (std::memory_order_relaxed);
+            MixTrackInfo t; t.slot = i; t.name = s.name; t.priority = s.priority; t.analysing = s.analysing.load(); t.group = s.group.load(); t.isSelf = (s.owner == self); t.sampleRate = s.sampleRate.load(); t.head = s.head.load (std::memory_order_acquire); t.lastDb = s.overall.load (std::memory_order_relaxed);
             out.push_back (t);
         }
         return out;
@@ -83,6 +83,20 @@ public:
         }
         return n;
     }
+    void pushStats (int slot, const SpatialStats& st) noexcept
+    {
+        if (slot < 0) return; Slot& s = slots[(size_t) slot];
+        for (int b = 0; b < kMixBands; ++b) { s.sp[(size_t) b].store (st.pan[b], std::memory_order_relaxed); s.sp[(size_t) (kMixBands + b)].store (st.corr[b], std::memory_order_relaxed); s.sp[(size_t) (2 * kMixBands + b)].store (st.monoLoss[b], std::memory_order_relaxed); }
+        s.sg[0].store (st.corrAll, std::memory_order_relaxed); s.sg[1].store (st.monoLossAll, std::memory_order_relaxed); s.sg[2].store (st.rmsDb, std::memory_order_relaxed); s.sg[3].store (st.crestDb, std::memory_order_relaxed);
+    }
+    SpatialStats stats (int slot) const
+    {
+        SpatialStats st; if (slot < 0) return st; const Slot& s = slots[(size_t) slot];
+        for (int b = 0; b < kMixBands; ++b) { st.pan[b] = s.sp[(size_t) b].load (std::memory_order_relaxed); st.corr[b] = s.sp[(size_t) (kMixBands + b)].load (std::memory_order_relaxed); st.monoLoss[b] = s.sp[(size_t) (2 * kMixBands + b)].load (std::memory_order_relaxed); }
+        st.corrAll = s.sg[0].load(); st.monoLossAll = s.sg[1].load(); st.rmsDb = s.sg[2].load(); st.crestDb = s.sg[3].load(); return st;
+    }
+    void setGroup (int slot, int g) { if (slot >= 0) slots[(size_t) slot].group.store (std::min (4, std::max (1, g))); }
+    int  group (int slot) const { return slot >= 0 ? slots[(size_t) slot].group.load() : 1; }
     void clearFrames (int slot) { if (slot >= 0) slots[(size_t) slot].head.store (0); }
 
     // ---- correio: uma instancia pede a outra para aplicar propostas (executado na thread de mensagens do alvo)
@@ -97,7 +111,7 @@ public:
 private:
     struct Slot
     {
-        std::atomic<bool> used { false }, analysing { false }, hasMail { false }; std::atomic<uint32_t> head { 0 }; std::atomic<float> overall { -120.f }, sampleRate { 48000.f };
+        std::atomic<int> group { 1 }; std::array<std::atomic<float>, (size_t) kMixBands * 3> sp {}; std::array<std::atomic<float>, 4> sg {}; std::atomic<bool> used { false }, analysing { false }, hasMail { false }; std::atomic<uint32_t> head { 0 }; std::atomic<float> overall { -120.f }, sampleRate { 48000.f };
         std::array<std::atomic<float>, (size_t) kMixBands * kMixHist> lv {}; const void* owner = nullptr; std::string name; int priority = 2; std::vector<MixMail> mail;
     };
     mutable std::mutex m; std::array<Slot, kMixSlots> slots; int counter = 0;
