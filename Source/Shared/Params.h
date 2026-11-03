@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — constantes e modelo de parametros (C++ puro, sem JUCE)
+//  PRIMEQ PRO by Piradex — constantes e modelo de parametros (C++ puro, sem JUCE)
 // =============================================================================
 #pragma once
 #include <cstddef>

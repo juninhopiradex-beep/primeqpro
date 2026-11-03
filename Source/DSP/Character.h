@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — Character: tres circuitos de saturacao ORIGINAIS (nao modelam hardware especifico)
+//  PRIMEQ PRO by Piradex — Character: tres circuitos de saturacao ORIGINAIS (nao modelam hardware especifico)
 //
 //   Clean : u/sqrt(1+u^2)                  -> simetrico, so harmonicos impares (3a dominante), distorcao muito baixa
 //   Subtle: tanh(u+b)-tanh(b), b>0         -> assimetrico, 2a harmonica presente (+ 3a), DC removido

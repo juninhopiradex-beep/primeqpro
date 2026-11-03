@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — ponto de ligacao ao PCC (Plugin Control Central)
+//  PRIMEQ PRO by Piradex — ponto de ligacao ao PCC (Plugin Control Central)
 //
 //  ESTADO: DESLIGADO por omissao (PQ_PCC_ENABLED = 0). Nenhum plugin Piradex chama o PCC hoje e o contrato da API do
 //  PCC ainda nao foi definido, por isso NAO ha rede neste build: o acesso e 100 % offline (Access.cpp), como os outros plugins.

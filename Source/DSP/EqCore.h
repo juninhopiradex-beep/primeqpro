@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — nucleo do EQ (24 bandas, IIR double, dinamica por banda)
+//  PRIMEQ PRO by Piradex — nucleo do EQ (24 bandas, IIR double, dinamica por banda)
 //
 //  Tempo real: sem alocacao em process(); tudo pre-alocado em prepare().
 //  Fluxo por sub-bloco de 32 amostras:

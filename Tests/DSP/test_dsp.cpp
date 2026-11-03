@@ -1,4 +1,4 @@
-// Testes DSP do PRIMEQ pro (C++ puro, sem JUCE): respostas analiticas vs medidas, identidade, M/S, dinamica,
+// Testes DSP do PRIMEQ PRO (C++ puro, sem JUCE): respostas analiticas vs medidas, identidade, M/S, dinamica,
 // sidechain, estabilidade, FFT, FIR (simetria / magnitude), Deresonate e CPU.
 #include "../../Source/DSP/EqCore.h"
 #include "../../Source/DSP/FirDesign.h"

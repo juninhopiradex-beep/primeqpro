@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — MixMeter: nivel e espaco por banda (28 bandas, 80 Hz–12 kHz, Q=3) a cada 25 ms (C++ puro)
+//  PRIMEQ PRO by Piradex — MixMeter: nivel e espaco por banda (28 bandas, 80 Hz–12 kHz, Q=3) a cada 25 ms (C++ puro)
 //
 //  Corre na thread de audio SO quando o utilizador liga "Analisar esta pista". Por banda mede:
 //   * pico do sinal mono (L+R)/2 filtrado (mesma definicao do detetor da banda dinamica) por janela de 25 ms, em dBFS;

@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — banco de medidores de nivel por banda (dominio do tempo, determinístico)
+//  PRIMEQ PRO by Piradex — banco de medidores de nivel por banda (dominio do tempo, determinístico)
 //
 //  Mede o MESMO que o detetor da banda dinamica ve: sinal -> band-pass RBJ (Q) -> pico |y| por janela de ~5 ms (dBFS).
 //  Guarda um histograma por banda (0,5 dB) para percentis (P50/P90...). Usado por De-Ess e Unmask.

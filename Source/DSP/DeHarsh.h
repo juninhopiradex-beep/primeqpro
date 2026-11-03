@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — De-harsh: atenuacao espectral de picos locais (STFT + overlap-add)
+//  PRIMEQ PRO by Piradex — De-harsh: atenuacao espectral de picos locais (STFT + overlap-add)
 //
 //  • STFT N=2048, hop 512 (75 % de sobreposicao), janela sqrt-Hann na analise e na sintese: reconstrucao perfeita
 //    quando o ganho e 1 (testado: erro < 1e-9). Latencia fixa e declarada: 2048 amostras.

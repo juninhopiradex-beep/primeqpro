@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — Smart Ops: Unmask (deterministico)
+//  PRIMEQ PRO by Piradex — Smart Ops: Unmask (deterministico)
 //
 //  Fonte do "mascarador": SIDECHAIN EXTERNO do plugin (outra faixa enviada para a entrada de sidechain).
 //  A comunicacao entre instancias por metadados NAO esta implementada.

@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — identidade visual: grafite mate, teal discreto, curvas de banda subtis
+//  PRIMEQ PRO by Piradex — identidade visual: grafite mate, teal discreto, curvas de banda subtis
 // =============================================================================
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>

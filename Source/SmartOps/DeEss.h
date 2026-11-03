@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — Smart Ops: De-Ess (deterministico, SEM aprendizagem automatica)
+//  PRIMEQ PRO by Piradex — Smart Ops: De-Ess (deterministico, SEM aprendizagem automatica)
 //
 //  Learn: medir o nivel por janela (5 ms) em 8 bandas 3,5–12 kHz (Q=2,5, igual ao detetor da banda dinamica).
 //  Propor: a banda com maior "explosividade" (P95 - P50) e o centro da sibilancia; limiar = percentil escolhido;

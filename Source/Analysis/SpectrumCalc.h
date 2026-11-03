@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — calculo do espectro (STFT de visualizacao, separado do processamento)
+//  PRIMEQ PRO by Piradex — calculo do espectro (STFT de visualizacao, separado do processamento)
 //  Janela Blackman-Harris (4 termos), calibracao: seno de amplitude 1.0 (0 dBFS) => 0 dB no pico.
 // =============================================================================
 #pragma once

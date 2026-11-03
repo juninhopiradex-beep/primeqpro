@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — registo de pistas partilhado entre instancias NO MESMO PROCESSO do anfitriao
+//  PRIMEQ PRO by Piradex — registo de pistas partilhado entre instancias NO MESMO PROCESSO do anfitriao
 //
 //  Cada instancia regista-se com um nome editavel (Kick, Bass, Vocals…), uma prioridade (quem e protegido) e publica,
 //  a cada 25 ms, os niveis das 28 bandas (so se "Analisar esta pista" estiver ligado). A thread de audio so escreve

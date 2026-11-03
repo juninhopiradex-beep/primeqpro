@@ -1,4 +1,10 @@
 # Changelog
+## 1.3.0
+- Nome do produto: **PRIMEQ PRO by Piradex** (instaladores PRIMEQPRO-*).
+- Presets de fábrica: 114 originais em 14 categorias (Vocals, Drums, Bass, Guitar, Keys, Synth, Orquestra, Mixbus, Master, Corretivo, Géneros [Kizomba, Semba, Kuduro, Amapiano, Afrobeat, Hip-Hop, Trap], Sends, Utility). Menu por submenus.
+- Presets criados de raiz; não copiam conteúdo de terceiros.
+- Medição de cramping do biquad RBJ a 44,1/48/96 kHz (ver Docs/TESTING.md); correcção em curso.
+- Testes: 101 (DSP) + 81 (integração).
 ## 1.2.0
 - Novo: Assistente (dossiê EQNOVA X): Masking, Espaço (mapa frequência×panorama, mono safety, M/S), Mix Doctor, Intent-Based EQ, Mix Consequence Engine, relatório exportável.
 - Novo: modos Simple / Advanced / Expert; grupos G1–G4; indicador de Δ loudness; propostas com tipo/Mid-Side.

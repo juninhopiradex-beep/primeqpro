@@ -1,4 +1,4 @@
-// Teste de integracao do PRIMEQ pro (JUCE, sem anfitriao): processa audio real pelo AudioProcessor.
+// Teste de integracao do PRIMEQ PRO (JUCE, sem anfitriao): processa audio real pelo AudioProcessor.
 // Verifica: ganho medido, identidade/bypass, latencia/PDC dos 3 modos de fase, FIR vs analitico, dinamica e sidechain,
 // automacao rapida, estado/presets, mudancas de sample rate, ausencia de alocacoes na thread de audio, CPU e editor (render PNG).
 #include "Plugin/PluginProcessor.h"
@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <new>
 #include <random>
+#include <set>
 
 // contador de alocacoes SO da thread de teste (thread_local) durante a medicao
 static thread_local bool g_track = false; static thread_local long g_allocs = 0;
@@ -363,6 +364,26 @@ int main()
         pe->resized(); auto img = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f);
         juce::File out ("mix_unmask.png"); out.deleteFile(); juce::FileOutputStream fo (out); juce::PNGImageFormat().writeImageToStream (img, fo);
         CHECK (out.getSize() > 20000, "pagina Mix Unmask renderizada (%lld bytes)", (long long) out.getSize());
+    }
+    // 18) presets de fabrica: quantidade, unicidade, categorias, carga segura e audio finito
+    {
+        const auto& fpv = PrimeqProcessor::factoryPresets(); std::set<std::string> names, cats; bool okBands = true, okFinite = true; int nCat = 0;
+        auto p = make (fs, bs); std::mt19937 rng (9); std::normal_distribution<float> nd (0, 0.1f);
+        for (size_t i = 0; i < fpv.size(); ++i)
+        {
+            names.insert (fpv[i].name); const std::string n = fpv[i].name; const auto sl = n.find ('/'); if (sl != std::string::npos) cats.insert (n.substr (0, sl));
+            p->loadFactoryPreset ((int) i);
+            pq::BandParams bp[pq::kNumBands]; p->readBands (bp); int on = 0; for (auto& b : bp) if (b.on) { ++on; if (b.freq < 10 || b.freq > 24000 || std::fabs (b.gain) > 12.01 || b.q < 0.1 || b.q > 40) okBands = false; }
+            if (n.find ("Init") == std::string::npos && on == 0 && n.find ('/') != std::string::npos) okBands = false;
+            for (int k = 0; k < 3; ++k) { juce::AudioBuffer<float> b (2, bs); for (int c = 0; c < 2; ++c) for (int j = 0; j < bs; ++j) b.setSample (c, j, nd (rng)); juce::MidiBuffer m; p->processBlock (b, m); for (int c = 0; c < 2; ++c) for (int j = 0; j < bs; ++j) if (! std::isfinite (b.getSample (c, j))) okFinite = false; }
+        }
+        nCat = (int) cats.size();
+        INFO ("Presets de fabrica: %d (%d categorias)", (int) fpv.size(), nCat);
+        CHECK (fpv.size() >= 100 && names.size() == fpv.size(), "Presets: %d de fabrica, todos com nome unico (pedido: >= 80)", (int) fpv.size());
+        CHECK (nCat >= 12, "Presets: %d categorias (Vocals, Drums, Bass, Guitar, Keys, Synth, Orquestra, Mixbus, Master, Corretivo, G\xC3\xA9neros, Sends, Utility)", nCat);
+        CHECK (okBands, "Presets: todas as bandas dentro de limites seguros (|ganho| <= 12 dB, Q e frequencia validos)");
+        CHECK (okFinite, "Presets: carregar e processar ruido com cada preset => audio finito");
+        p->loadFactoryPreset (0); pq::BandParams z[pq::kNumBands]; p->readBands (z); int on0 = 0; for (auto& b : z) if (b.on) ++on0; CHECK (on0 == 0, "Preset Init (Flat) deixa todas as bandas desligadas");
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;

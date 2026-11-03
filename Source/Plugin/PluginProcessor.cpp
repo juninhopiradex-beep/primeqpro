@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "FactoryPresets.h"
 #include "../GUI/PluginEditor.h"
 #include "AppPaths.h"
 
@@ -553,7 +554,9 @@ namespace
 }
 const std::vector<PrimeqProcessor::FactoryPreset>& PrimeqProcessor::factoryPresets()
 {
-    static const std::vector<FactoryPreset> v {
+    static const std::vector<FactoryPreset> v = []
+    {
+    std::vector<FactoryPreset> r {
         { "Init (Flat)", [] (PrimeqProcessor& p) { p.resetAllBands(); p.resetFx(); } },
         { "Vocal Presence", [] (PrimeqProcessor& p) { p.resetAllBands(); p.setBand (0, band (BandType::HighPass, 80, 0, 0.707, 3)); p.setBand (1, band (BandType::Bell, 300, -2.5, 1.2)); p.setBand (2, band (BandType::Bell, 3500, 2.0, 1.0)); p.setBand (3, band (BandType::HighShelf, 10000, 2.0, 0.707)); } },
         { "Master - Gentle Smile", [] (PrimeqProcessor& p) { p.resetAllBands(); p.setBand (0, band (BandType::LowShelf, 60, 1.2, 0.707)); p.setBand (1, band (BandType::Bell, 350, -1.0, 0.8)); p.setBand (2, band (BandType::HighShelf, 12000, 1.5, 0.707)); } },
@@ -568,6 +571,17 @@ const std::vector<PrimeqProcessor::FactoryPreset>& PrimeqProcessor::factoryPrese
             p.setParamReal ("dh_on", 1.f); p.setParamReal ("dh_amount", 55.f); p.setParamReal ("dh_lo", 2500.f); p.setParamReal ("dh_hi", 9000.f); p.setParamReal ("dh_sens", 4.f); } },
         { "Dynamic De-Ess (7 kHz)", [] (PrimeqProcessor& p) { p.resetAllBands(); auto b = band (BandType::Bell, 7000, 0, 3.0); b.dyn = true; b.thr = -35; b.range = -6; b.ratio = 4; b.attackMs = 1; b.releaseMs = 60; b.det = DetMode::Peak; p.setBand (0, b); } },
     };
+    for (const auto& d : pq::fp::defs())          // presets originais organizados por categoria ("Categoria/Nome")
+        r.push_back ({ d.name, [&d] (PrimeqProcessor& p)
+        {
+            p.resetAllBands(); p.resetFx();
+            for (size_t i = 0; i < d.bands.size() && i < (size_t) kNumBands; ++i) p.setBand ((int) i, d.bands[i]);
+            const auto& f = d.fx; if (f.phase) p.setParamReal ("phase", (float) f.phase);
+            if (f.ch) { p.setParamReal ("ch_mode", (float) f.ch); p.setParamReal ("ch_drive", f.drive); p.setParamReal ("ch_mix", f.mix); p.setParamReal ("ch_os", (float) f.os); }
+            if (f.dh) { p.setParamReal ("dh_on", 1.f); p.setParamReal ("dh_amount", f.dhAmt); p.setParamReal ("dh_lo", f.dhLo); p.setParamReal ("dh_hi", f.dhHi); p.setParamReal ("dh_sens", f.dhSens); }
+        } });
+    return r;
+    }();
     return v;
 }
 void PrimeqProcessor::loadFactoryPreset (int idx)

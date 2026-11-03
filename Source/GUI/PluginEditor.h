@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — editor: cabecalho, grafico, inspector de banda, tira global, Smart Ops, login
+//  PRIMEQ PRO by Piradex — editor: cabecalho, grafico, inspector de banda, tira global, Smart Ops, login
 // =============================================================================
 #pragma once
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -474,7 +474,7 @@ public:
         auto card = getLocalBounds().withSizeKeepingCentre (380, 300).toFloat();
         g.setColour (kPanel); g.fillRoundedRectangle (card, 18.f); g.setColour (kLine); g.drawRoundedRectangle (card.reduced (0.5f), 18.f, 1.f);
         g.setGradientFill (juce::ColourGradient (kTeal, card.getX(), card.getY(), juce::Colour (0xffe6e9ec), card.getRight(), card.getY(), false));
-        g.setFont (fontOf (34.f, true)); g.drawText ("PRIMEQ pro", card.withTrimmedTop (28.f).withHeight (46.f).toNearestInt(), juce::Justification::centred);
+        g.setFont (fontOf (34.f, true)); g.drawText ("PRIMEQ PRO", card.withTrimmedTop (28.f).withHeight (46.f).toNearestInt(), juce::Justification::centred);
         g.setColour (kDim); g.setFont (fontOf (12.f)); g.drawText (T8 ("by Piradex  ·  Parametric + Dynamic EQ"), card.withTrimmedTop (76.f).withHeight (18.f).toNearestInt(), juce::Justification::centred);
     }
 private:

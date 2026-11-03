@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — Smart Ops: Reference Match (deterministico, SEM aprendizagem automatica)
+//  PRIMEQ PRO by Piradex — Smart Ops: Reference Match (deterministico, SEM aprendizagem automatica)
 //
 //  1) Espectro medio (LTAS) de uma referencia (WAV/AIFF/FLAC, lido fora da thread de audio) e do material aprendido,
 //     ambos pelo MESMO calculo (FFT 8192, Blackman-Harris) -> a normalizacao anula-se na diferenca.

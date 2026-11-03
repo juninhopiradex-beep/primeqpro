@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ pro by Piradex — AudioProcessor (adaptador JUCE)
+//  PRIMEQ PRO by Piradex — AudioProcessor (adaptador JUCE)
 //  Camadas: Plugin Host Adapter -> Parameter/State Model (APVTS) -> DSP (EqCore / FIR) -> Analysis -> GUI
 // =============================================================================
 #pragma once
@@ -10,6 +10,7 @@
 #include <atomic>
 #include <memory>
 #include <vector>
+#include <functional>
 #include "../DSP/EqCore.h"
 #include "../DSP/FirDesign.h"
 #include "../DSP/DeHarsh.h"
@@ -43,7 +44,7 @@ public:
     using juce::AudioProcessor::processBlock;
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
-    const juce::String getName() const override { return "PRIMEQ pro by Piradex"; }
+    const juce::String getName() const override { return "PRIMEQ PRO by Piradex"; }
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }
@@ -66,7 +67,7 @@ public:
     void resetAllBands();
 
     // ---- presets / A-B
-    struct FactoryPreset { const char* name; void (*apply) (PrimeqProcessor&); };
+    struct FactoryPreset { const char* name; std::function<void (PrimeqProcessor&)> apply; };
     static const std::vector<FactoryPreset>& factoryPresets();
     void loadFactoryPreset (int idx);
     int  abSlot() const { return slot; }

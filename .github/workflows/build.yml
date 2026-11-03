@@ -1,4 +1,4 @@
-name: Build PRIMEQ pro (testes + macOS VST3/AU + Windows VST3 + instaladores)
+name: Build PRIMEQ PRO (testes + macOS VST3/AU + Windows VST3 + instaladores)
 
 on:
   push:
@@ -37,7 +37,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: PRIMEQpro-test-logs
+          name: PRIMEQPRO-test-logs
           path: |
             test_dsp.log
             smoke.log
@@ -84,7 +84,7 @@ jobs:
 
       - name: Verificar binarios (arquitecturas e minimo do macOS)
         run: |
-          for b in "out/PRIMEQ pro by Piradex.vst3/Contents/MacOS/PRIMEQ pro by Piradex" "out/PRIMEQ pro by Piradex.component/Contents/MacOS/PRIMEQ pro by Piradex"; do
+          for b in "out/PRIMEQ PRO by Piradex.vst3/Contents/MacOS/PRIMEQ PRO by Piradex" "out/PRIMEQ PRO by Piradex.component/Contents/MacOS/PRIMEQ PRO by Piradex"; do
             echo "== $b"; lipo -archs "$b"; otool -l "$b" | grep -A3 -E "LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX" | grep -E "minos|version" | head -4
           done 2>&1 | tee binary-check.log
 
@@ -129,7 +129,7 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
-          cp -R "out/PRIMEQ pro by Piradex.component" "$HOME/Library/Audio/Plug-Ins/Components/"
+          cp -R "out/PRIMEQ PRO by Piradex.component" "$HOME/Library/Audio/Plug-Ins/Components/"
           killall -9 AudioComponentRegistrar 2>/dev/null || true
           auval -a | grep -i "PxEQ" || true
           auval -v aufx PxEQ Prdx 2>&1 | tee auval.log
@@ -137,22 +137,22 @@ jobs:
 
       - name: Zip dos plugins
         run: |
-          cd out && zip -qr "../PRIMEQpro-${VER}-macOS.zip" . -x "*.DS_Store" && cd ..
-          ls -la "PRIMEQpro-${VER}-macOS.zip"
+          cd out && zip -qr "../PRIMEQPRO-${VER}-macOS.zip" . -x "*.DS_Store" && cd ..
+          ls -la "PRIMEQPRO-${VER}-macOS.zip"
 
       - name: Instalador (.pkg)
         run: |
           set -e
           mkdir -p pkgroot/vst3 pkgroot/au build-pkg
-          cp -R "out/PRIMEQ pro by Piradex.vst3"      pkgroot/vst3/
-          cp -R "out/PRIMEQ pro by Piradex.component" pkgroot/au/
+          cp -R "out/PRIMEQ PRO by Piradex.vst3"      pkgroot/vst3/
+          cp -R "out/PRIMEQ PRO by Piradex.component" pkgroot/au/
           chmod +x Packaging/macos/scripts/postinstall
           pkgbuild --identifier com.beatfreak.primeqpro.vst3 --version "$VER" --install-location "/Library/Audio/Plug-Ins/VST3" --root pkgroot/vst3 build-pkg/vst3.pkg
           pkgbuild --identifier com.beatfreak.primeqpro.au   --version "$VER" --install-location "/Library/Audio/Plug-Ins/Components" --scripts Packaging/macos/scripts --root pkgroot/au build-pkg/au.pkg
           SIGN_ARGS=""
           if [ "$HAS_SIGN" = "true" ] && [ -n "${{ secrets.MACOS_INSTALLER_IDENTITY }}" ]; then SIGN_ARGS="--sign ${{ secrets.MACOS_INSTALLER_IDENTITY }}"; fi
-          productbuild --distribution Packaging/macos/Distribution.xml --package-path build-pkg --resources Packaging/macos/resources $SIGN_ARGS "PRIMEQpro-${VER}-macOS.pkg"
-          ls -la "PRIMEQpro-${VER}-macOS.pkg"
+          productbuild --distribution Packaging/macos/Distribution.xml --package-path build-pkg --resources Packaging/macos/resources $SIGN_ARGS "PRIMEQPRO-${VER}-macOS.pkg"
+          ls -la "PRIMEQPRO-${VER}-macOS.pkg"
 
       - name: Notarizar (so com credenciais Apple)
         if: env.HAS_NOTARIZE == 'true'
@@ -162,16 +162,16 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           set -e
-          xcrun notarytool submit "PRIMEQpro-${VER}-macOS.pkg" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
-          xcrun stapler staple "PRIMEQpro-${VER}-macOS.pkg"
+          xcrun notarytool submit "PRIMEQPRO-${VER}-macOS.pkg" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "PRIMEQPRO-${VER}-macOS.pkg"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: PRIMEQpro-macOS
+          name: PRIMEQPRO-macOS
           path: |
-            PRIMEQpro-*-macOS.pkg
-            PRIMEQpro-*-macOS.zip
+            PRIMEQPRO-*-macOS.pkg
+            PRIMEQPRO-*-macOS.zip
             binary-check.log
             auval.log
 
@@ -203,30 +203,30 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path out | Out-Null
-          $vst3 = Get-ChildItem -Path C:/b -Recurse -Directory -Filter "PRIMEQ pro by Piradex.vst3" | Select-Object -First 1
+          $vst3 = Get-ChildItem -Path C:/b -Recurse -Directory -Filter "PRIMEQ PRO by Piradex.vst3" | Select-Object -First 1
           if (-not $vst3) { throw "VST3 nao encontrado" }
-          Copy-Item -Recurse -Force $vst3.FullName "out\PRIMEQ pro by Piradex.vst3"
-          $exe = Get-ChildItem -Path C:/b -Recurse -File -Filter "PRIMEQ pro by Piradex.exe" | Select-Object -First 1
-          if ($exe) { Copy-Item $exe.FullName "out\PRIMEQ pro by Piradex (Standalone).exe" }
+          Copy-Item -Recurse -Force $vst3.FullName "out\PRIMEQ PRO by Piradex.vst3"
+          $exe = Get-ChildItem -Path C:/b -Recurse -File -Filter "PRIMEQ PRO by Piradex.exe" | Select-Object -First 1
+          if ($exe) { Copy-Item $exe.FullName "out\PRIMEQ PRO by Piradex (Standalone).exe" }
           Get-ChildItem -Recurse out | Select-Object FullName, Length
       - name: Zip
         shell: pwsh
-        run: Compress-Archive -Path out\* -DestinationPath "PRIMEQpro-$env:VER-Windows.zip"
+        run: Compress-Archive -Path out\* -DestinationPath "PRIMEQPRO-$env:VER-Windows.zip"
       - name: Instalador (.exe, Inno Setup)
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          & $iscc "/DVST3SRC=$PWD\out\PRIMEQ pro by Piradex.vst3" "/DOUTDIR=$PWD" Packaging\windows\PRIMEQpro.iss
+          & $iscc "/DVST3SRC=$PWD\out\PRIMEQ PRO by Piradex.vst3" "/DOUTDIR=$PWD" Packaging\windows\PRIMEQpro.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Get-ChildItem PRIMEQpro-*-Setup.exe
+          Get-ChildItem PRIMEQPRO-*-Setup.exe
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: PRIMEQpro-Windows
+          name: PRIMEQPRO-Windows
           path: |
-            PRIMEQpro-*-Windows-Setup.exe
-            PRIMEQpro-*-Windows.zip
+            PRIMEQPRO-*-Windows-Setup.exe
+            PRIMEQPRO-*-Windows.zip
             win-configure.log
 
   # ------------------------------------------------------------------ release com checksums
@@ -236,19 +236,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        with: { name: PRIMEQpro-macOS, path: dist }
+        with: { name: PRIMEQPRO-macOS, path: dist }
       - uses: actions/download-artifact@v4
-        with: { name: PRIMEQpro-Windows, path: dist }
+        with: { name: PRIMEQPRO-Windows, path: dist }
       - name: Checksums e notas
         run: |
           VER=$(grep -m1 -oE 'VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | cut -d' ' -f2)
           echo "VER=$VER" >> $GITHUB_ENV
-          cd dist && rm -f *.log && sha256sum PRIMEQpro-* > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
+          cd dist && rm -f *.log && sha256sum PRIMEQPRO-* > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
           {
-            echo "PRIMEQ pro by Piradex v$VER (commit ${GITHUB_SHA::7})"
+            echo "PRIMEQ PRO by Piradex v$VER (commit ${GITHUB_SHA::7})"
             echo
-            echo "- macOS: PRIMEQpro-$VER-macOS.pkg (VST3 + AU, universal Intel/Apple Silicon, macOS 10.13+) e .zip para instalacao manual"
-            echo "- Windows: PRIMEQpro-$VER-Windows-Setup.exe (VST3 x64) e .zip"
+            echo "- macOS: PRIMEQPRO-$VER-macOS.pkg (VST3 + AU, universal Intel/Apple Silicon, macOS 10.13+) e .zip para instalacao manual"
+            echo "- Windows: PRIMEQPRO-$VER-Windows-Setup.exe (VST3 x64) e .zip"
             echo "- Binarios NAO notarizados/assinados com Developer ID/Authenticode, a menos que as credenciais estejam configuradas (ver Packaging/SIGNING.md)"
             echo "- AAX: nao incluido (requer SDK Avid + assinatura PACE; ver Docs/AAX.md)"
             echo "- Funcionalidades prontas/parciais/em falta: Docs/FEATURES.md"
@@ -257,9 +257,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VER }}
-          name: PRIMEQ pro by Piradex v${{ env.VER }}
+          name: PRIMEQ PRO by Piradex v${{ env.VER }}
           body_path: RELEASE_NOTES.md
           files: |
-            dist/PRIMEQpro-*
+            dist/PRIMEQPRO-*
             dist/SHA256SUMS.txt
           fail_on_unmatched_files: true

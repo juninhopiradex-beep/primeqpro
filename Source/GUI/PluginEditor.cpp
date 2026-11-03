@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include <map>
 
 using namespace pqui;
 
@@ -34,7 +35,7 @@ void PrimeqEditor::paint (juce::Graphics& g)
 {
     g.fillAll (kBg);
     g.setGradientFill (juce::ColourGradient (kTeal, 18.f, 8.f, juce::Colour (0xffe6e9ec), 190.f, 8.f, false));
-    g.setFont (fontOf (22.f, true)); g.drawText ("PRIMEQ pro", 16, 6, 150, 34, juce::Justification::centredLeft);
+    g.setFont (fontOf (22.f, true)); g.drawText ("PRIMEQ PRO", 16, 6, 150, 34, juce::Justification::centredLeft);
     g.setColour (kDim); g.setFont (fontOf (11.f)); g.drawText ("by Piradex", 138, 12, 80, 28, juce::Justification::centredLeft);
     g.setColour (kDim); g.setFont (fontOf (11.f));
     g.drawText (AccessManager::get().roleText() + "   v" + juce::String (JucePlugin_VersionString), getWidth() - 330, getHeight() - 16, 320, 14, juce::Justification::centredRight);
@@ -81,16 +82,24 @@ void PrimeqEditor::timerCallback()
 void PrimeqEditor::presetMenu()
 {
     juce::PopupMenu m; const auto& fp = PrimeqProcessor::factoryPresets();
-    juce::PopupMenu f; for (size_t i = 0; i < fp.size(); ++i) f.addItem ((int) i + 1, fp[i].name);
+    juce::PopupMenu f; { std::map<juce::String, juce::PopupMenu> cats; std::vector<juce::String> order; std::vector<int> geral;
+        for (size_t i = 0; i < fp.size(); ++i)
+        {
+            const auto full = juce::String (juce::CharPointer_UTF8 (fp[i].name)); const int sl = full.indexOfChar ('/');
+            if (sl < 0) { geral.push_back ((int) i); continue; }
+            const auto cat = full.substring (0, sl); if (cats.find (cat) == cats.end()) order.push_back (cat); cats[cat].addItem ((int) i + 1, full.substring (sl + 1));
+        }
+        for (int i : geral) f.addItem (i + 1, juce::String (juce::CharPointer_UTF8 (fp[(size_t) i].name))); f.addSeparator();
+        for (const auto& c : order) f.addSubMenu (c, cats[c]); }
     m.addSubMenu ("Fabrica", f);
-    juce::PopupMenu u; const auto names = proc.userPresetNames(); for (int i = 0; i < names.size(); ++i) u.addItem (100 + i, names[i]);
+    juce::PopupMenu u; const auto names = proc.userPresetNames(); for (int i = 0; i < names.size(); ++i) u.addItem (1000 + i, names[i]);
     if (names.isEmpty()) u.addItem (-1, "(vazio)", false); m.addSubMenu ("Utilizador", u);
-    m.addSeparator(); m.addItem (900, "Guardar preset...");
+    m.addSeparator(); m.addItem (9000, "Guardar preset...");
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (presetBtn), [this, names] (int r)
     {
-        if (r >= 1 && r < 100) { proc.loadFactoryPreset (r - 1); presetName = PrimeqProcessor::factoryPresets()[(size_t) r - 1].name; presetBtn.setButtonText (presetName); }
-        else if (r >= 100 && r < 900) { if (proc.loadUserPreset (names[r - 100])) { presetName = names[r - 100]; presetBtn.setButtonText (presetName); } }
-        else if (r == 900)
+        if (r >= 1 && r < 1000) { proc.loadFactoryPreset (r - 1); presetName = juce::String (juce::CharPointer_UTF8 (PrimeqProcessor::factoryPresets()[(size_t) r - 1].name)); presetBtn.setButtonText (presetName); }
+        else if (r >= 1000 && r < 9000) { if (proc.loadUserPreset (names[r - 1000])) { presetName = names[r - 1000]; presetBtn.setButtonText (presetName); } }
+        else if (r == 9000)
         {
             auto* w = new juce::AlertWindow ("Guardar preset", "Nome do preset:", juce::MessageBoxIconType::NoIcon);
             w->addTextEditor ("name", presetName, ""); w->addButton ("Guardar", 1, juce::KeyPress (juce::KeyPress::returnKey)); w->addButton ("Cancelar", 0, juce::KeyPress (juce::KeyPress::escapeKey));
