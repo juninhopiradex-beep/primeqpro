@@ -6,6 +6,7 @@
 // =============================================================================
 #pragma once
 #include "LookAndFeel.h"
+#include "Overlay.h"
 #include "../Plugin/PluginProcessor.h"
 #include "../SmartOps/Consequence.h"
 
@@ -54,6 +55,7 @@ public:
     const pq::IntentPlan& intentPlan() const { return plan; }
     const pq::ConsequenceResult& consequences() const { return cons; }
 
+    std::function<void (const std::vector<OverlayZone>&)> onZones;     // alimenta o grafico principal
     void analyse()
     {
         auto& reg = pq::MixRegistry::get(); rows = visibleRows(); tracks.clear(); slotOf.clear();
@@ -68,7 +70,21 @@ public:
         if (! res.message.empty()) status = juce::String (juce::CharPointer_UTF8 (res.message.c_str()));
         else if (res.pairs.empty()) status = T8 ("Sem conflitos relevantes entre as pistas analisadas. Boa separação.");
         else status = juce::String ((int) res.pairs.size()) + T8 (" par(es) com mascaramento · ") + juce::String ((int) space.findings.size()) + T8 (" achado(s) espaciais.");
-        relayout(); repaint();
+        publishZones(); relayout(); repaint();
+    }
+    // zonas desta instancia: onde a sua pista e mascarada (vermelho) e achados espaciais (violeta)
+    void publishZones()
+    {
+        if (! onZones) return;
+        std::vector<OverlayZone> z; int me = -1; for (size_t i = 0; i < slotOf.size(); ++i) if (slotOf[i] == proc.mixSlot()) me = (int) i;
+        if (me >= 0)
+        {
+            for (const auto& pr : res.pairs) if (pr.victimIdx == me)
+                for (const auto& c : pr.conflicts) { const double hw = std::max (0.12, 0.75 / std::max (1.0, c.q)); OverlayZone o; o.f0 = c.freq * std::pow (2.0, -hw); o.f1 = c.freq * std::pow (2.0, hw); o.severity = (float) std::min (1.0, c.depthDb / 12.0); o.kind = OverlayZone::Masking; o.label = juce::String (tracks[(size_t) pr.protectedIdx].name) + " " + juce::String (juce::roundToInt (c.depthDb)) + " dB"; z.push_back (o); }
+            for (const auto& f : space.findings) if (f.track == me && f.kind != pq::SpaceFinding::MonoGlobal)
+            { OverlayZone o; o.f0 = pq::mixBandFreq (f.bandLo) / 1.12; o.f1 = pq::mixBandFreq (f.bandHi) * 1.12; o.severity = 0.5f; o.kind = OverlayZone::Space; o.label = f.kind == pq::SpaceFinding::MonoRisk ? "mono" : (f.kind == pq::SpaceFinding::MidCut ? "mid" : "centro"); z.push_back (o); }
+        }
+        onZones (z);
     }
     juce::String buildReport() const
     {

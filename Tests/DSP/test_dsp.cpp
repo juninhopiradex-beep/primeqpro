@@ -1,5 +1,7 @@
 // Testes DSP do PRIMEQ PRO (C++ puro, sem JUCE): respostas analiticas vs medidas, identidade, M/S, dinamica,
 // sidechain, estabilidade, FFT, FIR (simetria / magnitude), Deresonate e CPU.
+#include "../../Source/Shared/PccProtocol.h"
+#include "../../Source/Shared/Licensing.h"
 #include "../../Source/DSP/EqCore.h"
 #include "../../Source/DSP/FirDesign.h"
 #include "../../Source/Analysis/SpectrumCalc.h"
@@ -15,6 +17,7 @@
 #include "../../Source/Plugin/MixRegistry.h"
 #include "../../Source/SmartOps/Consequence.h"
 #include "../../Source/Shared/Units.h"
+#include "../../Source/SmartOps/Abx.h"
 #include <chrono>
 #include <cstdio>
 #include <random>
@@ -492,6 +495,35 @@ int main()
             CHECK (cr.sc.size() == 4 && B.collateralPct < A.collateralPct && B.maskRemainPct < 100 && A.mixRmsDb <= 0 && std::fabs (A.loudComp + A.mixRmsDb) < 1e-9, "Consequencias: sidechain tem menos corte desnecessario que EQ estatico; compensacao de loudness = inverso da variacao");
             CHECK (! C.props.empty() && C.props.size() == 2 * kb->conflicts.size(), "Consequencias: cenario C = EQ 1/3 + sidechain 2/3 (%d propostas)", (int) C.props.size());
         }
+    }
+    {   // PCC: protocolo assinado (Ed25519) — respostas geradas pela biblioteca `cryptography` (equivalente ao Deno/WebCrypto do servidor)
+        using namespace pq::pcc;
+        const std::string pk = "9bfb08f8ae1a6a6126083fec0af459a23bb0ebb7fd4e00f7a2d6a2c9214fb2b8", good = "{\"valid\": true, \"role\": \"beta\", \"expires\": \"2027-06-30\", \"message\": \"ok\", \"product\": \"PRIMEQPRO\", \"machineId\": \"MACH-1\", \"nonce\": \"00112233445566778899aabbccddeeff\", \"ts\": 1790000000, \"sig\": \"80c3d5dd2407c665b636a31617d638b06288a22c94848e522147b9cbfe8849176005eb591d06c6ab6d57087050e58ef150c5850594c942c12f8306f3659dce08\"}";
+        Reply r; const bool parsed = parseReply (good, r); std::string nonce = r.nonce;
+        CHECK (parsed && r.valid && r.role == "beta" && r.expires == "2027-06-30", "PCC: resposta JSON lida (valid, role, expires)");
+        CHECK (verifyReply (r, pk, "PRIMEQPRO", "MACH-1", &nonce), "PCC: assinatura Ed25519 do servidor verificada");
+        Reply t1 = r; t1.valid = ! t1.valid; Reply t2 = r; t2.expires = "2099-01-01"; Reply t3 = r; t3.role = "master"; Reply t4 = r; t4.sig[10] = (t4.sig[10] == 'a') ? 'b' : 'a';
+        CHECK (! verifyReply (t1, pk, "PRIMEQPRO", "MACH-1", &nonce) && ! verifyReply (t2, pk, "PRIMEQPRO", "MACH-1", &nonce) && ! verifyReply (t3, pk, "PRIMEQPRO", "MACH-1", &nonce) && ! verifyReply (t4, pk, "PRIMEQPRO", "MACH-1", &nonce), "PCC: resposta adulterada (valid/validade/role/assinatura) rejeitada");
+        std::string other = "ffeeddccbbaa99887766554433221100";
+        CHECK (! verifyReply (r, pk, "PRIMEQPRO", "OUTRA-MAQUINA", &nonce) && ! verifyReply (r, pk, "DELEX", "MACH-1", &nonce) && ! verifyReply (r, pk, "PRIMEQPRO", "MACH-1", &other), "PCC: replay (outra maquina, outro produto, outro nonce) rejeitado");
+        CHECK (! verifyReply (r, std::string (64, '0'), "PRIMEQPRO", "MACH-1", &nonce), "PCC: chave publica errada rejeita");
+        CHECK (keyHashOf (" PQP-ABCD-1234-EF01 ", "PRIMEQPRO") == "ba14dde1b1dbb2026766ac8a99e1fb02c1ed78629d03fdf7fc54df1b9c4ae34f", "PCC: keyHash = sha256(chave|PRODUTO) igual ao do servidor (espacos ignorados)");
+        const int exp = pq::lic::daysSince2026 (2027, 6, 30), today = pq::lic::daysSince2026 (2026, 11, 3); const long long now = r.ts + 3600;
+        CHECK (stillGood (r, exp, today, now), "PCC: licenca valida dentro da validade e da janela offline");
+        CHECK (! stillGood (r, exp, exp + 1, now), "PCC: licenca expirada recusada");
+        CHECK (! stillGood (r, exp, today, r.ts + (long long) (kGraceDays + 1) * 86400), "PCC: sem rede por mais de %d dias => recusada", kGraceDays);
+        CHECK (! stillGood (r, exp, today, r.ts - 5 * 86400), "PCC: timestamp do futuro (relogio recuado/replay) recusado");
+        Reply inv = r; inv.valid = false; CHECK (! stillGood (inv, exp, today, now), "PCC: resposta valid=false (revogada) recusada");
+        std::map<std::string, std::string> mm; CHECK (! parseFlatJson ("{\"a\": ", mm) && ! parseFlatJson ("lixo", mm) && parseFlatJson ("{\"a\":\"b\\\"c\",\"n\":12,\"t\":true}", mm) && mm["a"] == "b\"c" && mm["n"] == "12" && mm["t"] == "true", "PCC: parser JSON robusto a lixo e escapes");
+    }
+    {   // ABX cego: sorteio, contagem e estatistica binomial
+        CHECK (std::fabs (pq::binomTailP (10, 10) - 1.0 / 1024) < 1e-12 && std::fabs (pq::binomTailP (10, 9) - 11.0 / 1024) < 1e-12 && std::fabs (pq::binomTailP (10, 8) - 56.0 / 1024) < 1e-12 && pq::binomTailP (10, 0) == 1.0 && pq::binomTailP (10, 11) == 0.0, "ABX: p-valor binomial exacto (10/10 = 0.00098, 9/10 = 0.0107, 8/10 = 0.0547)");
+        pq::AbxSession a; a.start (10, 123); int nB = 0; for (int i = 0; i < 10; ++i) { if (a.xIsBNow()) ++nB; a.answer (a.xIsBNow()); }
+        CHECK (a.finished() && a.correct() == 10 && a.pValue() < 0.01 && nB > 0 && nB < 10, "ABX: responder sempre certo => 10/10, p < 0.01, X sorteado nos dois lados (%d B)", nB);
+        pq::AbxSession b; b.start (10, 5); for (int i = 0; i < 10; ++i) b.answer (! b.xIsBNow()); CHECK (b.correct() == 0 && b.pValue() == 1.0, "ABX: responder sempre errado => 0/10, p = 1");
+        int tot = 0, hits = 0; for (unsigned sd = 1; sd <= 400; ++sd) { pq::AbxSession c; c.start (10, sd); for (int i = 0; i < 10; ++i) c.answer (true); tot += 10; hits += c.correct(); }   // a dizer sempre "B": ~50% de acertos se o sorteio for justo
+        CHECK (std::fabs ((double) hits / tot - 0.5) < 0.03, "ABX: sorteio equilibrado (%.1f %% de X=B em %d tentativas)", 100.0 * hits / tot, tot);
+        pq::AbxSession d; d.start (10, 9); for (int i = 0; i < 6; ++i) d.answer (d.xIsBNow() ^ (i < 3)); CHECK (d.verdict().find ("nao ha prova") != std::string::npos || d.verdict().find ("Poucas") != std::string::npos || d.verdict().find ("sorte") != std::string::npos, "ABX: poucas/aleatorias respostas => sem conclusao de diferenca audivel");
     }
     {   // Cramping: Bell digital vs prototipo analogico (RBJ vs matched)
         auto aBell = [] (double f, double f0, double g, double q) { const double A = std::pow (10.0, g / 40.0); const std::complex<double> s (0.0, f / f0); return 20.0 * std::log10 (std::abs ((s * s + s * (A / q) + 1.0) / (s * s + s / (A * q) + 1.0))); };

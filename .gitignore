@@ -7,3 +7,5 @@ __pycache__/
 # segredos locais (as senhas em claro NUNCA vao para o GitHub)
 PRIVADO_senhas_*.txt
 secrets.b64
+PRIVADO_*
+Source/Shared/Secrets.h

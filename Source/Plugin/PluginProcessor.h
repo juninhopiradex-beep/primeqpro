@@ -101,6 +101,8 @@ public:
     std::atomic<float> meterL { 0.f }, meterR { 0.f }, cpuLoad { 0.f };
     std::atomic<int> listenBand { -1 };
     std::atomic<float> dhRedDb { 0.f };
+    std::atomic<int>   abxSide { 0 };                                  // ABX: 0 normal, 1 = A (original), 2 = B (processado)
+    std::atomic<float> abxComp { 1.f };                                // ganho linear aplicado ao lado B (loudness igualado)
     std::atomic<float> loudDeltaDb { 0.f };                          // nivel RMS pos - pre (media ~1.5 s), para A/B a loudness igualado
     int uiMode = 1;                                                  // 0 Simple, 1 Advanced, 2 Expert                              // reducao maxima atual do De-harsh (dB, <= 0)
     int  latencyFor (int phaseIdx) const;                            // so a parte da fase (compat.)
@@ -145,7 +147,7 @@ private:
     static constexpr int kChunk = 256, kDryCap = 1 << 16;
     std::vector<double> dL, dR, sL, sR; std::vector<float> fIn[2], fOut[2], dryRing[2], oL, oR, pL, pR, fTmp;
     int dryW = 0, primeLeft = 0;
-    float fadeGain = 1.f, fadeTarget = 1.f, bypState = 0.f, gainState = 1.f, agState = 0.f; int path = 0;
+    float fadeGain = 1.f, fadeTarget = 1.f, bypState = 0.f, gainState = 1.f, agState = 0.f, abxState = 1.f; int path = 0;
 
     // FIR
     juce::dsp::ConvolutionMessageQueue convQueue { 128 };

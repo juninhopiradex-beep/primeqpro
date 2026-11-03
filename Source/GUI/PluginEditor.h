@@ -8,6 +8,8 @@
 #include "../Shared/Units.h"
 #include "../SmartOps/ReferenceMatch.h"
 #include "MixPanel.h"
+#include "AbxPanel.h"
+#include "Onboarding.h"
 
 using pqui::T8;
 
@@ -209,7 +211,7 @@ public:
             k.s.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag); k.s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 62, 15);
             k.s.setColour (juce::Slider::rotarySliderFillColourId, c); k.s.getProperties().set ("bipolar", false);
             k.s.setRotaryParameters (juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
-            k.l.setText (name, juce::dontSendNotification); k.l.setJustificationType (juce::Justification::centred); k.l.setColour (juce::Label::textColourId, kDim); k.l.setFont (fontOf (10.f));
+            k.l.setText (T8 (name), juce::dontSendNotification); k.l.setJustificationType (juce::Justification::centred); k.l.setColour (juce::Label::textColourId, kDim); k.l.setFont (fontOf (10.f));
             addAndMakeVisible (k.s); addAndMakeVisible (k.l);
             k.att = std::make_unique<SliderAtt> (proc.apvts, id, k.s); k.s.textFromValueFunction = fmt; k.s.valueFromTextFunction = parse; k.s.updateText();
             if (auto* pp = proc.apvts.getParameter (id)) k.s.setDoubleClickReturnValue (true, pp->convertFrom0to1 (pp->getDefaultValue()));
@@ -488,11 +490,17 @@ private:
         juce::Thread::launch ([safe, pass, rem]
         {
             const auto m = AccessManager::matchPassword (pass);   // PBKDF2 fora da thread de mensagens
-            juce::MessageManager::callAsync ([safe, m, rem]
+            AccessManager::PccOutcome po = AccessManager::PccOutcome::Disabled; juce::String pmsg;
+            if (m.index < 0 && ! m.expired && AccessManager::get().pccConfigured()) po = AccessManager::get().loginPcc (pass, rem, pmsg);   // rede: tambem fora da thread de mensagens
+            juce::MessageManager::callAsync ([safe, m, rem, po, pmsg]
             {
                 if (safe == nullptr) return;
-                const auto res = AccessManager::get().applyLogin (m, rem);
                 safe->busy = false; safe->enter.setEnabled (true); safe->msg.setColour (juce::Label::textColourId, pqui::kRed);
+                if (po == AccessManager::PccOutcome::Ok) { safe->pw.clear(); safe->msg.setText ({}, juce::dontSendNotification); if (safe->onOk) safe->onOk(); return; }
+                if (po == AccessManager::PccOutcome::Unreachable) { safe->msg.setText (pqui::T8 ("Sem ligação ao servidor de licenças. Verifique a internet."), juce::dontSendNotification); return; }
+                if (po == AccessManager::PccOutcome::BadReply)    { safe->msg.setText (pqui::T8 ("Resposta do servidor não reconhecida."), juce::dontSendNotification); return; }
+                if (po == AccessManager::PccOutcome::Invalid)     { safe->msg.setText (pmsg.isNotEmpty() ? pmsg : pqui::T8 ("Licença inválida, expirada ou desativada."), juce::dontSendNotification); return; }
+                const auto res = AccessManager::get().applyLogin (m, rem);
                 if (res == AccessManager::LoginResult::Ok) { safe->pw.clear(); safe->msg.setText ({}, juce::dontSendNotification); if (safe->onOk) safe->onOk(); }
                 else if (res == AccessManager::LoginResult::Expired) safe->msg.setText (pqui::T8 ("Esta senha beta já expirou."), juce::dontSendNotification);
                 else safe->msg.setText ("Senha incorreta.", juce::dontSendNotification);
@@ -514,15 +522,18 @@ public:
     void selectBand (int b) { graph.select (b); }
     void showMix (bool s) { mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip }) c->setVisible (! s); fx.setVisible (! s && proc.uiMode != 0); if (s) smart.setVisible (false); else smart.setVisible (smartBtn.getToggleState()); resized(); }
     MixPanel& getMix() { return mix; }
+    AbxPanel& getAbx() { return abx; }
+    OnboardingOverlay& getGuide() { return guide; }
+    void showAbx (bool s) { abxBtn.setToggleState (s, juce::dontSendNotification); abx.setActive (s); resized(); }
     void showSmart (bool s) { smartBtn.setToggleState (s, juce::dontSendNotification); smart.setVisible (s && ! mix.isVisible()); resized(); }
 private:
     void timerCallback() override;
     void applyMode();
     void presetMenu();
     PrimeqProcessor& proc; pqui::Lnf lnf;
-    EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; LoginOverlay login;
+    EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; AbxPanel abx; LoginOverlay login; OnboardingOverlay guide;
     juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
-    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
+    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, zonesBtn { "ZONAS" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;
     juce::String presetName { "Init (Flat)" }; bool wasUnlocked = true; int lastSel = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrimeqEditor)

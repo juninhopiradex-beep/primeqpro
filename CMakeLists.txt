@@ -9,7 +9,7 @@ endif()
 # Windows: runtime do Visual C++ embutido (nao precisa do VC++ Redistributable)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(PRIMEQPRO VERSION 1.3.0 LANGUAGES C CXX)
+project(PRIMEQPRO VERSION 1.4.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -69,6 +69,12 @@ target_compile_definitions(PrimeqPro PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
     JUCE_MODAL_LOOPS_PERMITTED=0)
+# PCC (Plugin Control Central): ligado so se URL e chave publica Ed25519 (64 hex) forem dadas
+set(PQ_PCC_URL "https://ejjeittwyjttmevhajxo.supabase.co" CACHE STRING "URL do projeto Supabase do PCC (https://xxxx.supabase.co)")
+set(PQ_PCC_PUBKEY "064c37512051906b9c8f1a9dfc962e9a1cd4c9f5b0f44ce66a12842b8e70a868" CACHE STRING "Chave publica Ed25519 do PCC (64 hex)")
+if(PQ_PCC_URL AND PQ_PCC_PUBKEY)
+    target_compile_definitions(PrimeqPro PUBLIC PQ_PCC_URL="${PQ_PCC_URL}" PQ_PCC_PUBKEY="${PQ_PCC_PUBKEY}")
+endif()
 if(PQ_AAX)
     target_compile_definitions(PrimeqPro PUBLIC PQ_AAX=1)
 endif()

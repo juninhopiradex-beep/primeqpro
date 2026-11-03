@@ -1,0 +1,42 @@
+# PRIMEQ PRO by Piradex — Manual (PT) / Quick guide (EN)
+
+## 1. Primeiros passos
+1. Instale (macOS `.pkg` / Windows `Setup.exe`) e abra o plugin numa pista no DAW.
+2. Até 31/12/2026 o plugin funciona sem senha. Depois, introduza a sua licença (a chave nunca sai do computador: só é enviado o seu hash ao servidor de licenças).
+3. No primeiro arranque aparece um **guia de 6 passos**. Reabra a qualquer momento com o botão **?**.
+4. Escolha o modo em **Simple / Advanced / Expert** (topo). Simple mostra o essencial; Expert mostra tudo.
+
+## 2. Equalizador
+- **24 bandas.** Clique no gráfico para criar, arraste para mudar frequência/ganho, roda do rato para o Q. Duplo clique repõe.
+- **Tipos:** Bell, Low/High Shelf, Notch, Band-pass, Tilt, HP, LP (até 96 dB/oct e Brickwall).
+- **Colocação:** Stereo / L / R / Mid / Side por banda.
+- **Fase:** Zero Latency (IIR), Natural, Linear. A latência é reportada ao DAW.
+- **Dinâmica:** cada banda pode ser dinâmica (threshold, ratio, attack/release, sidechain externo).
+- **Presets:** menu **Presets** com 114 presets de fábrica por categoria (Vocals, Drums, Bass, Guitar, Keys, Synth, Orquestra, Mixbus, Master, Corretivo, Géneros, Sends, Utility). São pontos de partida: ajuste sempre de ouvido.
+- **A/B, Undo/Redo, Bypass, Delta** (ouvir só o que o EQ muda).
+
+## 3. Assistente (EQNOVA X)
+Botão **ASSISTENTE**. Marque **ANALISAR** nas pistas (uma instância por pista, mesmo projecto) e escolha o separador:
+- **Masking:** onde duas pistas disputam as mesmas frequências; compare EQ, dinâmica e sidechain e aplique.
+- **Espaço:** mapa frequência × panorama, mono safety, cortes só no Mid.
+- **Doutor:** escolha um sintoma; vê evidências medidas e hipóteses etiquetadas ("a investigar", "compatível com os dados", "não confirmado").
+- **Intenção:** Clarity / Punch / Warmth / Space / Smooth, com intensidade. Ganhos ≤ 4 dB, tudo editável.
+- **Cenários:** compara A (EQ), B (sidechain), C (misto).
+**ZONAS** (topo) liga/desliga no gráfico principal as zonas de masking (vermelho) e espaço (violeta) detectadas.
+Use os **grupos G1–G4** para separar projectos no mesmo processo do DAW.
+O Assistente é determinístico (medições e regras), não é IA nem substitui o ouvido.
+
+## 4. Teste ABX cego
+Botão **ABX**. Compara **A = original** com **B = processado**, com loudness igualado.
+1. Escolha o número de tentativas (mín. 10 recomendado).
+2. Em cada tentativa ouça A, B e X (X é A ou B, sorteado em segredo) e responda.
+3. No fim vê acertos e **p-valor**. p < 0,05 significa que ouviu diferença acima do acaso. Não prova que o resultado soe *melhor*.
+
+## 5. Dicas
+- Alterou o loudness? Use **Auto Gain** e o indicador **Δ loudness** antes de comparar: o som mais alto parece sempre melhor.
+- Alta-frequência em 44,1 kHz: o filtro Bell é desenhado para igualar o protótipo analógico perto de Nyquist.
+- Problemas? Contacte juninhopiradex@hotmail.com com DAW, sistema e versão.
+
+---
+## Quick guide (EN)
+Install, open on a track; a 6-step guide appears on first run (button **?** reopens it). Click the graph to add bands; choose band type, slope, phase mode (Zero Latency / Natural / Linear) and placement (Stereo/L/R/Mid/Side). **ASSISTENTE** analyses several tracks for masking and stereo space and proposes editable EQ / dynamic / sidechain fixes (deterministic, not AI). **ZONES** draws masking (red) and space (violet) on the main graph. **ABX** runs a blind level-matched A/B test with a binomial p-value. 114 factory presets are starting points only.

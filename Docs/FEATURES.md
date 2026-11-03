@@ -15,6 +15,7 @@
   - Cenários: A (EQ), B (sidechain), C (1/3 EQ + 2/3 sidechain + 0,5 dB) com masking restante, nível da pista/soma, alteração tonal, pico, dinâmica, corte desnecessário e compensação de loudness.
   - Grupos G1–G4: só pistas do mesmo grupo se veem (isolamento manual entre projectos/sessões).
 - Mix Unmask (aba própria): registo de pistas entre instâncias no mesmo processo do anfitrião, nome e prioridade editáveis, análise de mascaramento por par e comparação EQ vs Dinâmica vs Sidechain, aplicação por correio à pista alvo, guia de routing.
+- Overlay ZONAS (masking/espaço) no gráfico principal; teste ABX cego com loudness igualado e p-valor; guia de arranque (6 passos); manual em Docs/MANUAL.md.
 - A/B, presets de fábrica e de utilizador (.pqpreset), undo/redo, estado versionado.
 - Licenciamento offline PBKDF2 (master/beta), trial até 31/12/2026, guarda contra recuo do relógio.
 ## Parcial / limitações
@@ -22,9 +23,9 @@
 - Mix Unmask: só vê instâncias no mesmo processo do anfitrião; análise opt-in (usa CPU); estimativa sobre níveis medidos (25 ms), não é audição; sidechain exige routing no DAW; não existe ajuste automático de volume por pista.
 - Reference Match: a referência não é guardada no projecto. De-Ess/De-harsh têm falsos positivos (hi-hats, sons tonais sustentados). Character são circuitos originais, não emulam hardware.
 - Brickwall é um filtro finito (ordem 32), não uma parede ideal.
-- PCC: stub desactivado (`PQ_PCC_ENABLED=0`), nenhum plugin actual chama o PCC; ver LICENSING_PCC.md.
+- PCC: cliente e função `validate` prontos, mas só funcionam depois de a função ser instalada no Supabase (ver LICENSING_PCC.md). Sem isso o login online dá "sem ligação"/resposta inválida.
 - Assistente: Doutor e Intenção são regras DSP determinísticas (V1 do dossiê), não ML; não medem reverb, dicção nem preferência. "Pan candidato" é sugestão (o plugin não tem panner). Cenários limitados a 2–3 pistas e a um conflito de cada vez; usam níveis por banda (25 ms), não forma de onda — não veem fase/latência/crest factor de banda larga. Sem isolamento automático entre projectos no mesmo processo do DAW (use os grupos). Não existem ainda testes cegos de preferência auditiva, nem prova de superioridade face a concorrentes.
 ## Não implementado
-AAX (precisa do SDK da Avid), integração PCC real (falta o contrato da API).
+AAX (precisa do SDK da Avid).
 ## Não verificado
 Compilação macOS/Windows (só no CI), validação AU (auval), carregamento em DAWs reais, AAX.

@@ -54,6 +54,7 @@ static bool finite (const std::vector<float>& v) { for (float x : v) if (! std::
 int main()
 {
     juce::ScopedJuceInitialiser_GUI init;
+    AccessManager::get().setOnboardingSeen();   // o guia de 1.o arranque nao deve tapar as capturas dos testes
     const double fs = 48000; const int bs = 512;
 
     // 1) identidade e bypass
@@ -325,6 +326,11 @@ int main()
         std::unique_ptr<juce::AudioProcessorEditor> ed (pb->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860);
         pe->showMix (true); pe->getMix().analyse(); const auto& R = pe->getMix().result();
         const pq::MixPair* kb = nullptr; for (auto& pr : R.pairs) if (R.curve.size() == 4 && pr.victimIdx >= 0 && ! pr.conflicts.empty() && pr.conflicts[0].freq < 160) { kb = &pr; break; }
+        {   // overlay no grafico principal: o baixo (vitima do kick) recebe zonas de masking
+            const auto& Z = pe->getGraph().zones; bool lowZone = false; for (auto& z : Z) if (z.kind == OverlayZone::Masking && z.f0 < 200 && z.f1 > 60) lowZone = true;
+            CHECK (! Z.empty() && lowZone, "Overlay: grafico principal recebe %d zona(s); masking nos graves marcado na pista do baixo", (int) Z.size());
+            pe->showMix (false); pe->resized(); auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("overlay_zonas.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); pe->showMix (true);
+        }
         INFO ("Mix Unmask real: %d pares; %s", (int) R.pairs.size(), R.message.c_str());
         CHECK (kb != nullptr, "Mix Unmask: conflito de graves detetado entre as instancias reais (kick/bass)");
         if (kb)
@@ -384,6 +390,68 @@ int main()
         CHECK (okBands, "Presets: todas as bandas dentro de limites seguros (|ganho| <= 12 dB, Q e frequencia validos)");
         CHECK (okFinite, "Presets: carregar e processar ruido com cada preset => audio finito");
         p->loadFactoryPreset (0); pq::BandParams z[pq::kNumBands]; p->readBands (z); int on0 = 0; for (auto& b : z) if (b.on) ++on0; CHECK (on0 == 0, "Preset Init (Flat) deixa todas as bandas desligadas");
+    }
+    // 19) stress: sample rates 44.1-192 kHz, blocos 0..4096 aleatorios, automacao em todos os parametros, troca de fase a meio, re-prepare
+    {
+        std::mt19937 rng (7); bool okFinite = true, okBound = true, okLat = true; double worst = 0; int configs = 0;
+        const int sizes[] { 1, 2, 3, 7, 32, 33, 64, 100, 128, 480, 512, 1000, 1024, 2048, 4096 };
+        for (double sr : { 44100.0, 48000.0, 88200.0, 96000.0, 192000.0 })
+            for (int phase = 0; phase < 3; ++phase)
+            {
+                auto p = make (sr, 512); setP (*p, "phase", (float) phase); ++configs;
+                std::uniform_real_distribution<float> u (0.f, 1.f), nz (-0.5f, 0.5f); juce::MidiBuffer midi;
+                const int total = (int) sr; int done = 0; int latencyAtStart = -1;
+                while (done < total)
+                {
+                    const int n = sizes[rng() % (sizeof (sizes) / sizeof (sizes[0]))];
+                    for (int k = 0; k < 6; ++k)          // automacao agressiva
+                    {
+                        const int b = (int) (rng() % 24);
+                        setBandP (*p, b, "on", u (rng) > 0.4f ? 1.f : 0.f); setBandP (*p, b, "freq", 20.f * std::pow (1000.f, u (rng)));
+                        setBandP (*p, b, "gain", -24.f + 48.f * u (rng)); setBandP (*p, b, "q", 0.1f * std::pow (300.f, u (rng))); setBandP (*p, b, "type", (float) (rng() % 8));
+                    }
+                    juce::AudioBuffer<float> buf (2, n); for (int c = 0; c < 2; ++c) for (int i = 0; i < n; ++i) buf.setSample (c, i, nz (rng));
+                    p->processBlock (buf, midi);
+                    for (int c = 0; c < 2; ++c) for (int i = 0; i < n; ++i) { const float v = buf.getSample (c, i); if (! std::isfinite (v)) okFinite = false; else worst = std::max (worst, (double) std::fabs (v)); }
+                    if (latencyAtStart < 0) latencyAtStart = p->currentLatency(); else if (phase != 2 && p->currentLatency() != latencyAtStart) okLat = latencyAtStart == p->currentLatency();
+                    done += n;
+                }
+                if (worst > 200.0) okBound = false;
+                juce::AudioBuffer<float> e (2, 0); p->processBlock (e, midi);   // bloco vazio nao pode rebentar
+                p->prepareToPlay (sr * 0.5 + 100.0, 256); p->prepareToPlay (sr, 1024);   // re-prepare com taxas diferentes
+            }
+        INFO ("Stress: %d configuracoes (5 taxas x 3 modos de fase), pico max %.1f", configs, worst);
+        CHECK (okFinite, "Stress: audio sempre finito (sem NaN/Inf) com automacao agressiva e blocos de 1 a 4096");
+        CHECK (okBound, "Stress: saida limitada (pico <= 200) mesmo com bandas a +-24 dB e Q extremos");
+        CHECK (okLat, "Stress: latencia reportada estavel dentro de cada modo");
+    }
+    // 20) ABX: lado A = original exacto; lado B = processado mesmo com bypass ligado; compensacao de nivel aplicada
+    {
+        auto p = make (fs, bs); setBandP (*p, 0, "on", 1); setBandP (*p, 0, "freq", 1000); setBandP (*p, 0, "gain", 9); setBandP (*p, 0, "q", 1);
+        auto x = sine (1000, fs, 48000);
+        p->abxSide.store (1); run (*p, x, bs); auto yA = run (*p, x, bs); double eA = 0; for (size_t i = 24000; i < x.size(); ++i) eA = std::max (eA, (double) std::fabs (yA[i] - x[i]));
+        CHECK (eA < 1e-5, "ABX lado A: sai o original (erro max %.2e) mesmo com a banda a +9 dB", eA);
+        setP (*p, "bypass", 1); p->abxSide.store (2); run (*p, x, bs); auto yB = run (*p, x, bs); const double gB = rmsDb (yB, 24000, 48000) - rmsDb (x, 24000, 48000);
+        CHECK (std::fabs (gB - 9.0) < 0.3, "ABX lado B: processado mesmo com bypass ligado (%.2f dB)", gB);
+        p->abxComp.store (std::pow (10.f, -9.f / 20.f)); for (int k = 0; k < 6; ++k) run (*p, x, bs); auto yC = run (*p, x, bs); const double gC = rmsDb (yC, 24000, 48000) - rmsDb (x, 24000, 48000);
+        CHECK (std::fabs (gC) < 0.5, "ABX lado B com loudness igualado: diferenca de nivel %.2f dB", gC);
+        p->abxSide.store (0); setP (*p, "bypass", 0);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (p->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860);
+        CHECK (p->abxSide.load() == 0, "ABX: abrir o editor nao altera o som (painel escondido)");
+        pe->showAbx (true); CHECK (p->abxSide.load() == 1 && ! pe->getAbx().isDone(), "ABX: abrir o painel arranca o teste no lado A");
+        auto& ab = pe->getAbx(); ab.answer (false); CHECK (ab.session().answered() == 0, "ABX: so se pode responder depois de ouvir X");
+        for (int i = 0; i < 10; ++i) { ab.listen (ab.session().xIsBNow() ? 2 : 1, true); ab.answer (ab.session().xIsBNow()); }
+        CHECK (ab.isDone() && ab.session().correct() == 10 && p->abxSide.load() == 0, "ABX: 10 tentativas respondidas => concluido e som volta ao normal");
+        auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("abx_painel.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo);
+        pe->showAbx (false); CHECK (p->abxSide.load() == 0, "ABX: fechar o painel repoe o som normal");
+    }
+    // 21) onboarding: 6 passos, fecha no fim e avisa (para gravar "visto")
+    {
+        OnboardingOverlay o; o.setSize (1000, 700); bool closed = false; o.onClose = [&] { closed = true; };
+        o.open(); CHECK (o.isVisible() && o.pages() == 6, "Onboarding: abre com %d passos", o.pages());
+        for (int i = 0; i < o.pages(); ++i) { o.gotoPage (i); if (i == 0 || i == 3) { auto im = o.createComponentSnapshot (o.getLocalBounds(), true, 1.0f); juce::File f (juce::String ("onboarding_") + juce::String (i + 1) + ".png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); } }
+        o.gotoPage (5); { int nb = 0; for (auto* c : o.getChildren()) if (auto* b = dynamic_cast<juce::TextButton*> (c)) { ++nb; if (b->getButtonText().startsWith ("Come") && b->onClick) b->onClick(); } (void) nb; }
+        CHECK (closed && ! o.isVisible(), "Onboarding: 'Come\xC3\xA7""ar' no ultimo passo fecha o guia e notifica");
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;

@@ -1,32 +1,45 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — ponto de ligacao ao PCC (Plugin Control Central)
-//
-//  ESTADO: DESLIGADO por omissao (PQ_PCC_ENABLED = 0). Nenhum plugin Piradex chama o PCC hoje e o contrato da API do
-//  PCC ainda nao foi definido, por isso NAO ha rede neste build: o acesso e 100 % offline (Access.cpp), como os outros plugins.
-//
-//  Quando o PCC existir, este e o unico sitio a ligar: implementar IPccValidator e devolver-lo em makeValidator().
-//  Contrato PROPOSTO (a confirmar contra o PCC real, nao e uma API existente):
-//     POST {PCC_URL}/functions/v1/validate
-//       { "product":"PRIMEQPRO", "version":"1.0.0", "machineId":"<SystemStats::getUniqueDeviceID()>", "keyId":"<id da senha>" }
-//     -> { "valid":true, "role":"master|beta", "expires":"YYYY-MM-DD", "message":"..." }
-//  Regras: nunca bloquear a thread de audio nem a de mensagens; cache local com validade; se o servidor estiver
-//  inacessivel, manter o ultimo estado valido (modo offline) em vez de bloquear o utilizador.
+//  PRIMEQ PRO by Piradex — cliente do PCC (Plugin Control Central, Supabase)
+//  Contrato e assinatura: ver Source/Shared/PccProtocol.h. Ligado quando o build define PQ_PCC_URL e PQ_PCC_PUBKEY
+//  (cmake -DPQ_PCC_URL=https://xxxx.supabase.co -DPQ_PCC_PUBKEY=<64 hex>). Sem eles o PCC fica desligado.
+//  NUNCA chamar nas threads de audio ou de mensagens: faz rede (bloqueante, timeout 8 s).
 // =============================================================================
 #pragma once
+#include <juce_core/juce_core.h>
 #include <string>
+#include "../Shared/PccProtocol.h"
 
-#ifndef PQ_PCC_ENABLED
- #define PQ_PCC_ENABLED 0
+#ifndef PQ_PCC_URL
+ #define PQ_PCC_URL ""
+#endif
+#ifndef PQ_PCC_PUBKEY
+ #define PQ_PCC_PUBKEY ""
 #endif
 
-namespace pq
+namespace pq { namespace pccnet
 {
-struct PccResult { bool reachable = false, valid = false; std::string role, expires, message; };
+inline constexpr const char* kProduct = "PRIMEQPRO";
+inline bool enabled() { return std::string (PQ_PCC_URL).size() > 8 && std::string (PQ_PCC_PUBKEY).size() == 64; }
+inline std::string machineId() { return juce::SystemStats::getUniqueDeviceID().toStdString(); }
 
-class IPccValidator
+enum class Status { Ok, Unreachable, BadReply };
+
+// pergunta ao servidor; `out` so e preenchido com respostas cuja assinatura/nonce/maquina/produto foram verificados
+inline Status validateBlocking (const std::string& keyHash, pcc::Reply& out)
 {
-public:
-    virtual ~IPccValidator() = default;
-    virtual PccResult validate (const std::string& machineId, const std::string& keyId) = 0;   // sincrono: chamar numa thread de fundo
-};
+    if (! enabled()) return Status::Unreachable;
+    juce::Random rnd; std::string nonce; for (int i = 0; i < 16; ++i) nonce += juce::String::toHexString ((int) rnd.nextInt (256)).paddedLeft ('0', 2).toStdString();
+    juce::DynamicObject::Ptr o = new juce::DynamicObject();
+    o->setProperty ("product", juce::String (kProduct)); o->setProperty ("version", juce::String (JucePlugin_VersionString));
+    o->setProperty ("machineId", juce::String (machineId())); o->setProperty ("keyHash", juce::String (keyHash)); o->setProperty ("nonce", juce::String (nonce));
+    const auto body = juce::JSON::toString (juce::var (o.get()), true);
+    auto url = juce::URL (juce::String (PQ_PCC_URL).trimCharactersAtEnd ("/") + "/functions/v1/validate").withPOSTData (body);
+    auto stream = url.createInputStream (juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
+                                             .withExtraHeaders ("Content-Type: application/json\r\n").withConnectionTimeoutMs (8000).withHttpRequestCmd ("POST"));
+    if (stream == nullptr) return Status::Unreachable;
+    const auto text = stream->readEntireStreamAsString().toStdString();
+    pcc::Reply r;
+    if (! pcc::parseReply (text, r) || ! pcc::verifyReply (r, PQ_PCC_PUBKEY, kProduct, machineId(), &nonce)) return Status::BadReply;
+    out = r; return Status::Ok;
 }
+}} // namespace pq::pccnet

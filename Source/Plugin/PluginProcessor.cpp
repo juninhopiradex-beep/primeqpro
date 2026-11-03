@@ -281,7 +281,8 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     BandParams bands[kNumBands]; readBands (bands); applyMorph (bands); core.setParams (bands);
     core.setListen (listenBand.load (std::memory_order_relaxed));
     const int phaseIdx = std::clamp ((int) (pPhase->load() + 0.5f), 0, 2);
-    const bool bypass = pBypass->load() > 0.5f, delta = pDelta->load() > 0.5f, autoG = pAuto->load() > 0.5f;
+    const int abxS = abxSide.load (std::memory_order_relaxed); const float abxC = abxComp.load (std::memory_order_relaxed);
+    const bool bypass = abxS == 1 ? true : (abxS == 2 ? false : pBypass->load() > 0.5f), delta = pDelta->load() > 0.5f, autoG = pAuto->load() > 0.5f;
     Stage tgt; tgt.path = phaseIdx != 0 ? 1 : 0; tgt.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); tgt.dh = pDhOn->load() > 0.5f;
     const int chModeIdx = std::clamp ((int) (pChMode->load() + 0.5f), 0, 3);
     tgt.os = chModeIdx > 0 ? (1 << std::clamp ((int) (pChOs->load() + 0.5f), 0, 2)) : 0;
@@ -387,6 +388,7 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
                 double wL = delta ? (dL[(size_t) i] - dryL) * gainState : dL[(size_t) i] * gainState;
                 double wR = delta ? (dR[(size_t) i] - dryR) * gainState : dR[(size_t) i] * gainState;
                 wL = fadeGain * wL + (1.0 - fadeGain) * dryL; wR = fadeGain * wR + (1.0 - fadeGain) * dryR;
+                if (abxS != 0) { abxState += (abxC - abxState) * 0.002f; wL *= abxState; wR *= abxState; }
                 const float bt = bypass ? 1.f : 0.f; bypState += (bt - bypState) * bk; if (std::fabs (bt - bypState) < 1e-5f) bypState = bt;
                 if (std::fabs ((float) gTarget - gainState) < 1e-6f) gainState = (float) gTarget;
                 oLd = bypState * dryL + (1.0 - bypState) * wL; oRd = bypState * dryR + (1.0 - bypState) * wR;

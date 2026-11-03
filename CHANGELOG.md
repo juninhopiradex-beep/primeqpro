@@ -1,4 +1,9 @@
 # Changelog
+## 1.4.0
+- Filtro Bell matched (Vicanek): cramping perto de Nyquist 7,4 → 1,2 dB (44,1/48 kHz).
+- Segurança: hashes de senhas fora do repositório (injectados no CI); validação online via PCC com resposta assinada Ed25519 (função `validate` em pcc/supabase).
+- Novo: overlay ZONAS no gráfico, teste ABX cego, guia de arranque, manual (Docs/MANUAL.md).
+- CI: pluginval (strictness 5) em macOS e Windows.
 ## 1.3.0
 - Nome do produto: **PRIMEQ PRO by Piradex** (instaladores PRIMEQPRO-*).
 - Presets de fábrica: 114 originais em 14 categorias (Vocals, Drums, Bass, Guitar, Keys, Synth, Orquestra, Mixbus, Master, Corretivo, Géneros [Kizomba, Semba, Kuduro, Amapiano, Afrobeat, Hip-Hop, Trap], Sends, Utility). Menu por submenus.

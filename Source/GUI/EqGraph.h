@@ -7,6 +7,7 @@
 #include "../Plugin/PluginProcessor.h"
 #include <functional>
 
+#include "Overlay.h"
 class EqGraph : public juce::Component
 {
 public:
@@ -19,6 +20,8 @@ public:
     std::function<void (int)> onSelect;
     int selected = 0;
     std::vector<pq::DeresProposal> preview; bool showPreview = false;
+    std::vector<OverlayZone> zones; bool showZones = true;       // zonas de masking/espaco vindas do Assistente
+    void setZones (const std::vector<OverlayZone>& z) { zones = z; repaint(); }
 
     // chamado pelo timer do editor (thread de mensagens)
     void tick()
@@ -88,6 +91,21 @@ public:
         { auto s = specPath (pre, true); g.setColour (kDim.withAlpha (0.16f)); g.fillPath (s); }
         { auto s = specPath (post, true); g.setColour (kTeal.withAlpha (0.20f)); g.fillPath (s); auto l = specPath (post, false); g.setColour (kTeal.withAlpha (0.65f)); g.strokePath (l, juce::PathStrokeType (1.2f)); }
         if (proc.getParamReal ("peakhold") > 0.5f) { auto l = specPath (pk, false); g.setColour (kWarn.withAlpha (0.55f)); g.strokePath (l, juce::PathStrokeType (1.f)); }
+
+        // zonas do Assistente (masking = vermelho, espaco = violeta), por baixo das curvas
+        if (showZones && ! zones.empty())
+        {
+            g.setFont (fontOf (9.5f));
+            for (const auto& z : zones)
+            {
+                const float x0 = juce::jlimit (p.getX(), p.getRight(), xOf (z.f0)), x1 = juce::jlimit (p.getX(), p.getRight(), xOf (z.f1));
+                if (x1 - x0 < 2.f) continue;
+                const auto c = z.kind == OverlayZone::Masking ? kRed : juce::Colour (0xffa78bfa); const float a = 0.10f + 0.24f * juce::jlimit (0.f, 1.f, z.severity);
+                g.setGradientFill (juce::ColourGradient (c.withAlpha (a), 0.f, p.getY(), c.withAlpha (a * 0.35f), 0.f, p.getBottom(), false)); g.fillRect (x0, p.getY(), x1 - x0, p.getHeight());
+                g.setColour (c.withAlpha (0.55f)); g.drawVerticalLine ((int) x0, p.getY(), p.getBottom()); g.drawVerticalLine ((int) x1, p.getY(), p.getBottom());
+                if (z.label.isNotEmpty()) { g.setColour (c.brighter (0.4f).withAlpha (0.95f)); g.drawText (z.label, (int) x0 + 2, (int) p.getY() + 2, std::max (30, (int) (x1 - x0)), 12, juce::Justification::topLeft, false); }
+            }
+        }
 
         // curvas individuais (a partir dos coeficientes) e total
         const int npts = std::max (16, (int) (p.getWidth() / 2.f));

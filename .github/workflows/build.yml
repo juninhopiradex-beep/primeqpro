@@ -20,6 +20,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Segredos de licenca (senhas offline)
+        shell: bash
+        env:
+          S_B64: ${{ secrets.PRIMEQPRO_SECRETS_B64 }}
+        run: |
+          if [ -n "$S_B64" ]; then echo "$S_B64" | base64 -d > Source/Shared/Secrets.h; echo "Secrets.h injetado"; else echo "::warning::PRIMEQPRO_SECRETS_B64 nao definido: build SEM senhas offline (so periodo aberto ate 31/12/2026 e PCC)"; fi
       - name: Dependencias JUCE (Linux)
         run: |
           sudo apt-get update
@@ -50,6 +56,12 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - name: Segredos de licenca (senhas offline)
+        shell: bash
+        env:
+          S_B64: ${{ secrets.PRIMEQPRO_SECRETS_B64 }}
+        run: |
+          if [ -n "$S_B64" ]; then echo "$S_B64" | base64 -d > Source/Shared/Secrets.h; echo "Secrets.h injetado"; else echo "::warning::PRIMEQPRO_SECRETS_B64 nao definido: build SEM senhas offline (so periodo aberto ate 31/12/2026 e PCC)"; fi
 
       - name: Versao e segredos de assinatura
         run: |
@@ -135,6 +147,15 @@ jobs:
           auval -v aufx PxEQ Prdx 2>&1 | tee auval.log
           tail -5 auval.log
 
+      - name: pluginval (VST3, strictness 5)
+        continue-on-error: true
+        run: |
+          curl -sL -o pv.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          unzip -q pv.zip
+          set +e
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --timeout-ms 180000 "out/PRIMEQ PRO by Piradex.vst3" 2>&1 | tee pluginval-mac.log
+          rc=${PIPESTATUS[0]}; echo "pluginval exit=$rc"; exit $rc
+
       - name: Zip dos plugins
         run: |
           cd out && zip -qr "../PRIMEQPRO-${VER}-macOS.zip" . -x "*.DS_Store" && cd ..
@@ -174,6 +195,7 @@ jobs:
             PRIMEQPRO-*-macOS.zip
             binary-check.log
             auval.log
+            pluginval-mac.log
 
   # ------------------------------------------------------------------ Windows x64
   windows:
@@ -181,6 +203,12 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - name: Segredos de licenca (senhas offline)
+        shell: bash
+        env:
+          S_B64: ${{ secrets.PRIMEQPRO_SECRETS_B64 }}
+        run: |
+          if [ -n "$S_B64" ]; then echo "$S_B64" | base64 -d > Source/Shared/Secrets.h; echo "Secrets.h injetado"; else echo "::warning::PRIMEQPRO_SECRETS_B64 nao definido: build SEM senhas offline (so periodo aberto ate 31/12/2026 e PCC)"; fi
       - name: Caminhos longos
         shell: pwsh
         run: git config --global core.longpaths true
@@ -209,6 +237,14 @@ jobs:
           $exe = Get-ChildItem -Path C:/b -Recurse -File -Filter "PRIMEQ PRO by Piradex.exe" | Select-Object -First 1
           if ($exe) { Copy-Item $exe.FullName "out\PRIMEQ PRO by Piradex (Standalone).exe" }
           Get-ChildItem -Recurse out | Select-Object FullName, Length
+      - name: pluginval (VST3, strictness 5)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Invoke-WebRequest -Uri https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip -OutFile pv.zip
+          Expand-Archive pv.zip -DestinationPath pv
+          & .\pv\pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 180000 "out\PRIMEQ PRO by Piradex.vst3" 2>&1 | Tee-Object -FilePath pluginval-win.log
+          exit $LASTEXITCODE
       - name: Zip
         shell: pwsh
         run: Compress-Archive -Path out\* -DestinationPath "PRIMEQPRO-$env:VER-Windows.zip"
@@ -225,6 +261,7 @@ jobs:
         with:
           name: PRIMEQPRO-Windows
           path: |
+            pluginval-win.log
             PRIMEQPRO-*-Windows-Setup.exe
             PRIMEQPRO-*-Windows.zip
             win-configure.log

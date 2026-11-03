@@ -10,6 +10,7 @@
 #include <atomic>
 #include <memory>
 #include "../Shared/Licensing.h"
+#include "PccClient.h"
 
 class AccessManager
 {
@@ -27,17 +28,29 @@ public:
     enum class LoginResult { Ok, Wrong, Expired };
     LoginResult applyLogin (Match m, bool remember);
     void logout();
+
+    // ---- PCC (validacao online assinada; ver Shared/PccProtocol.h). Funcoes BLOQUEANTES: so em threads de fundo.
+    enum class PccOutcome { Ok, Invalid, Unreachable, BadReply, Disabled };
+    PccOutcome loginPcc (const juce::String& password, bool remember, juce::String& message);
+    void revalidatePcc();                                            // 1x por dia, em segundo plano; revogacao desliga o acesso
+    bool pccConfigured() const { return pq::pccnet::enabled(); }
     void checkExpiry();                                              // periodicamente (thread de mensagens)
+    bool onboardingSeen() const { return props->getBoolValue ("onboardDone", false); }
+    void setOnboardingSeen() { props->setValue ("onboardDone", true); props->saveIfNeeded(); }
     int  today() const;                                              // dia atual, com guarda contra recuo do relógio
 
 private:
     AccessManager();
     void setRole (int index);
+    void setPcc (const pq::pcc::Reply& r, const std::string& keyHash);
+    void restorePcc();
+    void storePcc (const pq::pcc::Reply& r, const std::string& keyHash);
     juce::String tokenFor (int index) const;
     mutable juce::CriticalSection lock;
     std::unique_ptr<juce::PropertiesFile> props;
     std::atomic<bool> unlocked { false };
     std::atomic<int> roleValue { 0 };
     int currentIndex = -1;
+    bool pccActive = false; pq::pcc::Reply pccReply; std::string pccHash; int pccExpDays = -1;
     mutable int lastSeenDay = 0;
 };
