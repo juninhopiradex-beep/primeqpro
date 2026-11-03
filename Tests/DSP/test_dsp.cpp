@@ -493,6 +493,19 @@ int main()
             CHECK (! C.props.empty() && C.props.size() == 2 * kb->conflicts.size(), "Consequencias: cenario C = EQ 1/3 + sidechain 2/3 (%d propostas)", (int) C.props.size());
         }
     }
+    {   // Cramping: Bell digital vs prototipo analogico (RBJ vs matched)
+        auto aBell = [] (double f, double f0, double g, double q) { const double A = std::pow (10.0, g / 40.0); const std::complex<double> s (0.0, f / f0); return 20.0 * std::log10 (std::abs ((s * s + s * (A / q) + 1.0) / (s * s + s / (A * q) + 1.0))); };
+        double wM = 0, wR = 0, typ = 0; bool fin = true;
+        for (double fs : { 44100.0, 48000.0 }) for (double f0 : { 1000.0, 5000.0, 10000.0, 15000.0 }) for (double q : { 0.7, 2.0 }) for (double g : { -12.0, -6.0, 6.0, 12.0 })
+        {
+            auto k = designBand (BandType::Bell, 0, fs, f0, g, q); Cascade kr; kr.n = 1; kr.c[0] = biquadRBJ (BandType::Bell, fs, f0, g, q);
+            double mx = 0, mr = 0;
+            for (double f = 20; f < 20000 && f < fs * 0.499; f *= 1.03) { const double a = aBell (f, f0, g, q), m = magDb (k, 2 * M_PI * f / fs); if (! std::isfinite (m)) fin = false; mx = std::max (mx, std::fabs (m - a)); mr = std::max (mr, std::fabs (magDb (kr, 2 * M_PI * f / fs) - a)); }
+            wM = std::max (wM, mx); wR = std::max (wR, mr); if (f0 <= 10000 && q >= 2.0) typ = std::max (typ, mx);
+        }
+        std::printf ("INFO    Cramping Bell 44.1/48k: pior desvio RBJ %.2f dB -> matched %.2f dB (tipico f0<=10k,Q>=2: %.2f dB)\n", wR, wM, typ);
+        CHECK (fin && wM < wR * 0.5 && wM < 3.0, "Bell matched: desvio ao prototipo analogico reduzido a menos de metade do RBJ (%.2f vs %.2f dB), sempre finito", wM, wR);
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }

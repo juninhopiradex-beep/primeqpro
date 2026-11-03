@@ -53,6 +53,70 @@ inline Coefs biquadRBJ (BandType t, double fs, double f, double gainDb, double q
     Coefs c; c.b0 = b0 / a0; c.b1 = b1 / a0; c.b2 = b2 / a0; c.a1 = a1 / a0; c.a2 = a2 / a0; return c;
 }
 
+// ---- Design "matched" (Vicanek): polos por matched-z do prototipo analogico e zeros
+// escolhidos para igualar |H| do prototipo em DC, w0 e Nyquist. Elimina o cramping do
+// RBJ perto de Nyquist (a 44.1 kHz, bell a 10-18 kHz desviava 4-6 dB). Devolve false
+// se o sistema for mal condicionado (o chamador usa RBJ).
+inline bool matchedBiquad (const double n[3], const double d[3], double w0, Coefs& out)
+{
+    using cd = std::complex<double>;
+    auto mag2 = [&] (double W)
+    {
+        const cd s (0.0, W), nn = n[0] * s * s + n[1] * s + n[2], dd = d[0] * s * s + d[1] * s + d[2];
+        return std::norm (nn) / std::norm (dd);
+    };
+    const cd disc = std::sqrt (cd (d[1] * d[1] - 4.0 * d[0] * d[2], 0.0));
+    const cd p1 = std::exp (w0 * (-d[1] + disc) / (2.0 * d[0])), p2 = std::exp (w0 * (-d[1] - disc) / (2.0 * d[0]));
+    const double a1 = -(p1 + p2).real(), a2 = (p1 * p2).real();
+    const double G0 = mag2 (0.0), Gn = mag2 (M_PI / w0), Gc = mag2 (1.0);
+    const double B0 = (1 + a1 + a2) * (1 + a1 + a2), B1 = (1 - a1 + a2) * (1 - a1 + a2), B2 = -4.0 * a2;
+    const double s2 = std::sin (w0 * 0.5) * std::sin (w0 * 0.5), f0 = 1.0 - s2, f1 = s2, f2 = 4.0 * f0 * f1;
+    if (f2 < 1e-9) return false;
+    const double A0 = G0 * B0, A1 = Gn * B1;
+    const double A2 = (Gc * (B0 * f0 + B1 * f1 + B2 * f2) - A0 * f0 - A1 * f1) / f2;
+    const double r0 = std::sqrt (A0), r1 = std::sqrt (A1), W = 0.5 * (r0 + r1), disc2 = W * W + A2;
+    if (disc2 < 0.0) return false;
+    const double b0 = 0.5 * (W + std::sqrt (disc2)), b1 = 0.5 * (r0 - r1);
+    if (b0 < 1e-12) return false;
+    const double b2 = -A2 / (4.0 * b0);
+    if (! std::isfinite (b0 + b1 + b2 + a1 + a2) || std::fabs (a2) >= 1.0) return false;
+    out.b0 = b0; out.b1 = b1; out.b2 = b2; out.a1 = a1; out.a2 = a2;
+    return true;
+}
+
+inline Coefs biquadMatched (BandType t, double fs, double f, double gainDb, double q)
+{
+    const Coefs rbj = biquadRBJ (t, fs, f, gainDb, q);
+    if (t != BandType::Bell) return rbj;   // shelves: matched-z nao melhorou (medido), ficam RBJ
+    f = safeFreq (f, fs); q = clampd (q, kMinQ, kMaxQ);
+    const double r = f / fs, lo = 0.015, hi = 0.03;
+    if (r < lo || std::fabs (gainDb) < 1e-6) return rbj;
+    const double A = std::pow (10.0, clampd (gainDb, -60.0, 60.0) / 40.0), sA = std::sqrt (A);
+    double n[3], d[3];
+    if (t == BandType::Bell)          { n[0] = 1; n[1] = A / q; n[2] = 1; d[0] = 1; d[1] = 1.0 / (A * q); d[2] = 1; }
+    else if (t == BandType::LowShelf) { n[0] = A; n[1] = A * sA / q; n[2] = A * A; d[0] = A; d[1] = sA / q; d[2] = 1; }
+    else                              { n[0] = A * A; n[1] = A * sA / q; n[2] = A; d[0] = 1; d[1] = sA / q; d[2] = A; }
+    Coefs m;
+    if (t == BandType::Bell && gainDb < 0.0)
+    {
+        // corte = inverso exacto do reforco simetrico (mesmo erro em dB, sem polos largos mal mapeados)
+        const double Ab = 1.0 / A;
+        const double nb[3] { 1.0, Ab / q, 1.0 }, db[3] { 1.0, 1.0 / (Ab * q), 1.0 };
+        Coefs bst;
+        if (! matchedBiquad (nb, db, 2.0 * M_PI * r, bst) || bst.b0 < 1e-9) return rbj;
+        m.b0 = 1.0 / bst.b0; m.b1 = bst.a1 / bst.b0; m.b2 = bst.a2 / bst.b0;
+        m.a1 = bst.b1 / bst.b0; m.a2 = bst.b2 / bst.b0;
+        if (std::fabs (m.a2) >= 1.0 || std::fabs (m.a1) >= 1.0 + m.a2) return rbj;   // zeros do reforco fora do circulo
+    }
+    else if (! matchedBiquad (n, d, 2.0 * M_PI * r, m)) return rbj;
+    if (r >= hi) return m;
+    const double k = (r - lo) / (hi - lo);   // transicao suave RBJ -> matched
+    Coefs c;
+    c.b0 = rbj.b0 + k * (m.b0 - rbj.b0); c.b1 = rbj.b1 + k * (m.b1 - rbj.b1); c.b2 = rbj.b2 + k * (m.b2 - rbj.b2);
+    c.a1 = rbj.a1 + k * (m.a1 - rbj.a1); c.a2 = rbj.a2 + k * (m.a2 - rbj.a2);
+    return c;
+}
+
 inline Coefs firstOrder (bool highpass, double fs, double f)
 {
     f = safeFreq (f, fs);
@@ -79,7 +143,7 @@ inline Cascade designBand (BandType t, int slopeIdx, double fs, double f, double
         if (order & 1) k.c[k.n++] = firstOrder (hp, fs, f);
         return k;
     }
-    k.c[k.n++] = biquadRBJ (t, fs, f, typeHasGain (t) ? gainDb : 0.0, q);
+    k.c[k.n++] = biquadMatched (t, fs, f, typeHasGain (t) ? gainDb : 0.0, q);
     return k;
 }
 
