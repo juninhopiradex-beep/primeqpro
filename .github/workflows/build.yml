@@ -143,8 +143,8 @@ jobs:
           mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
           cp -R "out/PRIMEQ PRO by Piradex.component" "$HOME/Library/Audio/Plug-Ins/Components/"
           killall -9 AudioComponentRegistrar 2>/dev/null || true
-          auval -a | grep -i "PxEQ" || true
-          auval -v aufx PxEQ Prdx 2>&1 | tee auval.log
+          auval -a | grep -i "PxPQ" || true
+          auval -v aufx PxPQ Prdx 2>&1 | tee auval.log
           tail -5 auval.log
 
       - name: pluginval (VST3, strictness 5)

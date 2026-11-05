@@ -1,4 +1,6 @@
 # Changelog
+## 1.4.1
+- CORRECÇÃO: o PRIMEQ PRO tinha o mesmo código de plugin (PxEQ) que o EQMotion, por isso a DAW (Studio One) escondia um deles. Novo código: PxPQ (VST3 CID e AU únicos). Sessões antigas que usavam o PRIMEQ PRO precisam de o inserir de novo.
 ## 1.4.0
 - Filtro Bell matched (Vicanek): cramping perto de Nyquist 7,4 → 1,2 dB (44,1/48 kHz).
 - Segurança: hashes de senhas fora do repositório (injectados no CI); validação online via PCC com resposta assinada Ed25519 (função `validate` em pcc/supabase).

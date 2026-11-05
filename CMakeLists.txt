@@ -9,7 +9,7 @@ endif()
 # Windows: runtime do Visual C++ embutido (nao precisa do VC++ Redistributable)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(PRIMEQPRO VERSION 1.4.0 LANGUAGES C CXX)
+project(PRIMEQPRO VERSION 1.4.1 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -42,7 +42,7 @@ juce_add_plugin(PrimeqPro
     COMPANY_NAME "Piradex"
     BUNDLE_ID "com.piradex.primeqpro"
     PLUGIN_MANUFACTURER_CODE Prdx
-    PLUGIN_CODE PxEQ
+    PLUGIN_CODE PxPQ
     FORMATS ${PQ_FORMATS}
     PRODUCT_NAME "PRIMEQ PRO by Piradex"
     DESCRIPTION "PRIMEQ PRO - equalizador parametrico e dinamico (24 bandas)"
