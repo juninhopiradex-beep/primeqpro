@@ -51,6 +51,6 @@ private:
         return s[i];
     }
     void close() { setVisible (false); if (onClose) onClose(); }
-    void refresh() { next.setButtonText (page == kPages - 1 ? "Começar" : "Seguinte"); repaint(); }
+    void refresh() { next.setButtonText (page == kPages - 1 ? T8 ("Começar") : T8 ("Seguinte")); repaint(); }
     int page = 0; juce::TextButton next, skip;
 };

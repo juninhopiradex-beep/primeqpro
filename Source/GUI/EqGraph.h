@@ -251,12 +251,12 @@ private:
         const char* tn[8] = { "Bell", "Low Shelf", "High Shelf", "High Pass", "Low Pass", "Notch", "Band Pass", "All Pass" };
         for (int i = 0; i < 8; ++i) ty.addItem (100 + i, tn[i], true, (int) bands[b].type == i);
         const char* pn[5] = { "Stereo", "Left", "Right", "Mid", "Side" };
-        for (int i = 0; i < 5; ++i) pl.addItem (200 + i, pn[i], true, (int) bands[b].place == i);
+        for (int i = 0; i < 5; ++i) pl.addItem (200 + i, pqui::T8 (pn[i]), true, (int) bands[b].place == i);
         for (int i = 0; i < pq::kNumSlopes; ++i) sl.addItem (300 + i, pq::kSlopeDb[i] ? juce::String (pq::kSlopeDb[i]) + " dB/oct" : juce::String ("Brickwall"), pq::typeIsCut (bands[b].type), bands[b].slope == i);
-        m.addSubMenu ("Tipo", ty); m.addSubMenu ("Canal", pl); m.addSubMenu ("Declive", sl); m.addSeparator();
-        m.addItem (400, "Dinamica", pq::typeHasGain (bands[b].type), bands[b].dyn);
-        m.addItem (401, "Ouvir (Listen)", true, proc.listenBand.load() == b);
-        m.addItem (402, "Copiar banda"); m.addItem (403, "Colar banda", hasClip); m.addSeparator(); m.addItem (404, "Apagar banda");
+        m.addSubMenu (pqui::T8 ("Tipo"), ty); m.addSubMenu (pqui::T8 ("Canal"), pl); m.addSubMenu (pqui::T8 ("Declive"), sl); m.addSeparator();
+        m.addItem (400, pqui::T8 ("Dinamica"), pq::typeHasGain (bands[b].type), bands[b].dyn);
+        m.addItem (401, pqui::T8 ("Ouvir (Listen)"), true, proc.listenBand.load() == b);
+        m.addItem (402, pqui::T8 ("Copiar banda")); m.addItem (403, pqui::T8 ("Colar banda"), hasClip); m.addSeparator(); m.addItem (404, pqui::T8 ("Apagar banda"));
         m.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (localAreaToGlobal (juce::Rectangle<int> ((int) cursor.x, (int) cursor.y, 1, 1))), [this, b] (int r)
         {
             if (r == 0) return; proc.undo.beginNewTransaction ("Band menu");

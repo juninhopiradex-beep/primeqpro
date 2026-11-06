@@ -4,6 +4,9 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_graphics/juce_graphics.h>
+#include <atomic>
+#include <string>
+#include <unordered_map>
 
 namespace pqui
 {
@@ -26,7 +29,36 @@ inline juce::Colour bandColour (int b)
     return juce::Colour (c[b % 12]);
 }
 inline juce::Font fontOf (float h, bool bold = false) { return juce::Font (juce::FontOptions (h, bold ? juce::Font::bold : juce::Font::plain)); }
-inline juce::String T8 (const char* s) { return juce::String (juce::CharPointer_UTF8 (s)); }
+// --- i18n PT/EN: o texto-fonte esta em PT; em EN procura-se no dicionario (I18nEn.inc). Textos sem entrada ficam como estao. ---
+namespace i18n
+{
+    inline std::atomic<int>& lang() { static std::atomic<int> l { 0 }; return l; }          // 0 = PT, 1 = EN
+    inline bool& forcePt() { thread_local bool f = false; return f; }                       // usado durante a construcao do editor
+    inline bool isEn() { return ! forcePt() && lang().load() == 1; }
+    inline const char* lookup (const std::string& pt)
+    {
+        static const std::unordered_map<std::string, const char*> m = []
+        {
+            std::unordered_map<std::string, const char*> r;
+            static const char* const tab[][2] = {
+#include "I18nEn.inc"
+            };
+            for (auto& p : tab) r.emplace (p[0], p[1]);
+            return r;
+        }();
+        auto it = m.find (pt); return it == m.end() ? nullptr : it->second;
+    }
+}
+inline juce::String T8 (const char* s)
+{
+    if (i18n::isEn()) if (const char* e = i18n::lookup (s)) return juce::String (juce::CharPointer_UTF8 (e));
+    return juce::String (juce::CharPointer_UTF8 (s));
+}
+inline juce::String tr (const juce::String& s)
+{
+    if (i18n::isEn()) if (const char* e = i18n::lookup (s.toStdString())) return juce::String (juce::CharPointer_UTF8 (e));
+    return s;
+}
 
 class Lnf : public juce::LookAndFeel_V4
 {

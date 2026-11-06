@@ -33,9 +33,10 @@ public:
         intRevertB.onClick = [this] { proc.smartRevert(); status = T8 ("Revertido."); repaint(); };
         autoGainB.onClick = [this] { proc.setParamReal ("autogain", proc.getParamReal ("autogain") > 0.5f ? 0.f : 1.f); repaint(); };
         reportB.onClick = [this] { exportReport(); };
-        for (int i = 0; i < 9; ++i) { const int ci = i / 3, m = i % 3; applyB[(size_t) i].setButtonText (m == 0 ? "Aplicar EQ" : (m == 1 ? T8 ("Aplicar Dinâmica") : "Aplicar Sidechain")); applyB[(size_t) i].onClick = [this, ci, m] { applyConflict (ci, m); }; }
-        for (int i = 0; i < 6; ++i) { actB[(size_t) i].setButtonText ("Aplicar"); actB[(size_t) i].onClick = [this, i] { applyAction (i); }; }
-        for (int i = 0; i < 3; ++i) { scB[(size_t) i].setButtonText (juce::String ("Aplicar ") + "ABC"[i]); scB[(size_t) i].onClick = [this, i] { if (cons.sc.size() == 4) send (res.pairs[(size_t) selPair].victimIdx, cons.sc[(size_t) i + 1].props); }; }
+        for (int i = 0; i < 9; ++i) { const int ci = i / 3, m = i % 3; applyB[(size_t) i].onClick = [this, ci, m] { applyConflict (ci, m); }; }
+        for (int i = 0; i < 6; ++i) { actB[(size_t) i].onClick = [this, i] { applyAction (i); }; }
+        for (int i = 0; i < 3; ++i) { scB[(size_t) i].onClick = [this, i] { if (cons.sc.size() == 4) send (res.pairs[(size_t) selPair].victimIdx, cons.sc[(size_t) i + 1].props); }; }
+        relabel();
         amount.setSliderStyle (juce::Slider::LinearHorizontal); amount.setRange (0, 100, 1); amount.setValue (50, juce::dontSendNotification); amount.setTextBoxStyle (juce::Slider::TextBoxRight, false, 54, 20); amount.setTextValueSuffix (" %");
         amount.setColour (juce::Slider::thumbColourId, kTeal); amount.setColour (juce::Slider::trackColourId, kTealDim); amount.setColour (juce::Slider::backgroundColourId, kLine);
         amount.onValueChange = [this] { refreshIntent(); }; addAndMakeVisible (amount);
@@ -102,6 +103,13 @@ public:
         return r;
     }
 
+    void relabel()
+    {
+        for (int i = 0; i < 9; ++i) { const int m = i % 3; applyB[(size_t) i].setButtonText (m == 0 ? T8 ("Aplicar EQ") : (m == 1 ? T8 ("Aplicar Dinâmica") : T8 ("Aplicar Sidechain"))); }
+        for (int i = 0; i < 6; ++i) actB[(size_t) i].setButtonText (T8 ("Aplicar"));
+        for (int i = 0; i < 3; ++i) scB[(size_t) i].setButtonText (T8 ("Aplicar ") + juce::String::charToString ("ABC"[i]));
+        repaint();
+    }
     void resized() override { relayout(); }
     void mouseDown (const juce::MouseEvent& e) override
     {
@@ -213,8 +221,8 @@ private:
     // ---------- acoes
     void rename (int slot, const std::string& cur)
     {
-        auto* w = new juce::AlertWindow ("Nome da pista", T8 ("Nome desta pista (ex.: Kick, Bass, Vocals):"), juce::MessageBoxIconType::NoIcon);
-        w->addTextEditor ("n", juce::String (cur), ""); w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey)); w->addButton ("Cancelar", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        auto* w = new juce::AlertWindow (T8 ("Nome da pista"), T8 ("Nome desta pista (ex.: Kick, Bass, Vocals):"), juce::MessageBoxIconType::NoIcon);
+        w->addTextEditor ("n", juce::String (cur), ""); w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey)); w->addButton (T8 ("Cancelar"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
         w->enterModalState (true, juce::ModalCallbackFunction::create ([this, w, slot] (int r)
         {
             if (r != 1) return; const auto n = w->getTextEditorContents ("n").trim(); if (n.isEmpty()) return;
@@ -256,18 +264,18 @@ private:
     std::array<double, pq::kMixBands> curve {}; bool haveCurve = false;
     void exportReport()
     {
-        chooser = std::make_unique<juce::FileChooser> ("Guardar relatorio", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("PRIMEQpro_relatorio.md"), "*.md");
+        chooser = std::make_unique<juce::FileChooser> (T8 ("Guardar relatorio"), juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("PRIMEQpro_relatorio.md"), "*.md");
         chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting, [this] (const juce::FileChooser& fc)
         { auto f = fc.getResult(); if (f != juce::File()) { f.replaceWithText (buildReport()); status = T8 ("Relatório guardado em ") + f.getFullPathName(); repaint(); } });
     }
 
     // ---------- pintura comum
-    void txt (juce::Graphics& g, const juce::String& s, juce::Rectangle<int> r, float h, juce::Colour c, bool bold = false, juce::Justification j = juce::Justification::centredLeft) { g.setColour (c); g.setFont (pqui::fontOf (h, bold)); g.drawText (s, r, j); }
+    void txt (juce::Graphics& g, const juce::String& s, juce::Rectangle<int> r, float h, juce::Colour c, bool bold = false, juce::Justification j = juce::Justification::centredLeft) { g.setColour (c); g.setFont (pqui::fontOf (h, bold)); g.drawText (pqui::tr (s), r, j); }
     void wrap (juce::Graphics& g, const juce::String& s, juce::Rectangle<int> r, float h, juce::Colour c, int lines = 3) { g.setColour (c); g.setFont (pqui::fontOf (h)); g.drawFittedText (s, r, juce::Justification::topLeft, lines, 1.f); }
     void paintTracks (juce::Graphics& g)
     {
         using namespace pqui; txt (g, T8 ("PISTAS NA SESSÃO"), { 14, 8, 220, 22 }, 13.f, kText, true);
-        auto gc = groupChip (); g.setColour (kLine); g.fillRoundedRectangle (gc.toFloat(), 5.f); txt (g, "GRUPO G" + juce::String (pq::MixRegistry::get().group (proc.mixSlot())), gc, 10.f, kTeal, true, juce::Justification::centred);
+        auto gc = groupChip (); g.setColour (kLine); g.fillRoundedRectangle (gc.toFloat(), 5.f); txt (g, T8 ("GRUPO G") + juce::String (pq::MixRegistry::get().group (proc.mixSlot())), gc, 10.f, kTeal, true, juce::Justification::centred);
         txt (g, T8 ("nome: clique · P = prioridade (quem é protegido) · só pistas do mesmo grupo"), { 14, 30, 310, 14 }, 9.5f, kDim);
         for (size_t i = 0; i < rows.size() && i < 9; ++i)
         {
@@ -425,7 +433,7 @@ private:
         using namespace pqui; auto c = content();
         if (res.pairs.empty() || cons.sc.size() != 4) { wrap (g, cons.message.empty() ? status : U (cons.message), c.withHeight (50), 12.f, kDim); return; }
         const auto chips = pairChipRects(); for (size_t i = 0; i < chips.size(); ++i) { const bool sel = (int) i == selPair; g.setColour (sel ? kTealDim : kLine); g.fillRoundedRectangle (chips[i].toFloat(), 6.f); txt (g, nameOf (res.pairs[i].protectedIdx) + juce::String (juce::CharPointer_UTF8 (" \xE2\x86\x92 ")) + nameOf (res.pairs[i].victimIdx), chips[i], 11.f, sel ? kTeal : kDim, true, juce::Justification::centred); }
-        const auto& pr = res.pairs[(size_t) selPair]; for (int i = 0; i < 3 && i < (int) pr.conflicts.size(); ++i) { const bool sel = i == selConf; g.setColour (sel ? kTealDim : kLine); g.fillRoundedRectangle (confChip (i).toFloat(), 6.f); txt (g, "Conflito " + juce::String ((int) std::lround (pr.conflicts[(size_t) i].freq)) + " Hz", confChip (i), 11.f, sel ? kTeal : kDim, true, juce::Justification::centred); }
+        const auto& pr = res.pairs[(size_t) selPair]; for (int i = 0; i < 3 && i < (int) pr.conflicts.size(); ++i) { const bool sel = i == selConf; g.setColour (sel ? kTealDim : kLine); g.fillRoundedRectangle (confChip (i).toFloat(), 6.f); txt (g, T8 ("Conflito ") + juce::String ((int) std::lround (pr.conflicts[(size_t) i].freq)) + " Hz", confChip (i), 11.f, sel ? kTeal : kDim, true, juce::Justification::centred); }
         auto tb = juce::Rectangle<int> (c.getX(), c.getY() + 34 + 28 + 10, c.getWidth(), 8 * 24 + 4); g.setColour (kPanel2); g.fillRoundedRectangle (tb.toFloat(), 8.f);
         static const char* lab[8] = { "Masking restante", "N\xC3\xADvel da pista (RMS)", "N\xC3\xADvel da soma (RMS)", "Maior altera\xC3\xA7\xC3\xA3o tonal m\xC3\xA9""dia", "Pico da banda (P95)", "Din\xC3\xA2mica da banda", "Corte desnecess\xC3\xA1rio", "Compensa\xC3\xA7\xC3\xA3o p/ A/B justo" };
         for (int r = 0; r < 8; ++r) txt (g, T8 (lab[r]), { c.getX() + 10, tb.getY() + 4 + r * 24, 220, 22 }, 10.5f, kDim, r == 0);

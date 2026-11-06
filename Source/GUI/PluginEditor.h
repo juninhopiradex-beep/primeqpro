@@ -134,7 +134,7 @@ public:
         using namespace pqui;
         g.setColour (kPanel); g.fillRoundedRectangle (getLocalBounds().toFloat(), 8.f);
         g.setColour (bandColour (band)); g.fillEllipse (60.f, 13.f, 12.f, 12.f);
-        g.setColour (kText); g.setFont (fontOf (12.f, true)); g.drawText ("Banda " + juce::String (band + 1), 76, 6, 80, 26, juce::Justification::centredLeft);
+        g.setColour (kText); g.setFont (fontOf (12.f, true)); g.drawText (T8 ("Banda ") + juce::String (band + 1), 76, 6, 80, 26, juce::Justification::centredLeft);
         g.setColour (kLine); g.drawVerticalLine ((int) ((float) freq.s.getX() + 3 * (float) freq.s.getWidth() - 4), 40.f, (float) getHeight() - 8.f);
     }
 private:
@@ -177,7 +177,7 @@ public:
     {
         meter.tick();
         const double fs = proc.sampleRateNow(); const int lat = proc.currentLatency();
-        info.setText ("Latencia " + juce::String (lat) + " smp (" + juce::String (1000.0 * lat / fs, 1) + " ms)    CPU " + juce::String (proc.cpuLoad.load() * 100.f, 1) + " %", juce::dontSendNotification);
+        info.setText (T8 ("Latencia ") + juce::String (lat) + " smp (" + juce::String (1000.0 * lat / fs, 1) + " ms)    CPU " + juce::String (proc.cpuLoad.load() * 100.f, 1) + " %", juce::dontSendNotification);
     }
     void resized() override
     {
@@ -343,6 +343,7 @@ public:
         using namespace pqui; g.setColour (kPanel); g.fillRoundedRectangle (getLocalBounds().toFloat(), 8.f);
         g.setColour (kText); g.setFont (fontOf (13.f, true)); g.drawText ("SMART OPS", 12, 8, 200, 20, juce::Justification::centredLeft);
     }
+    void refreshLanguage() { if (! proc.analyzer.isLearning() && graph.preview.empty()) configureOp(); refreshMorphStatus(); repaint(); }
 private:
     double learnSeconds() const
     {
@@ -456,13 +457,14 @@ public:
     explicit LoginOverlay (std::function<void()> onSuccess) : onOk (std::move (onSuccess))
     {
         using namespace pqui;
-        pw.setPasswordCharacter ((juce::juce_wchar) 0x2022); pw.setTextToShowWhenEmpty ("Senha de acesso", kDim); pw.setJustification (juce::Justification::centred);
+        pw.setPasswordCharacter ((juce::juce_wchar) 0x2022); pw.setTextToShowWhenEmpty (T8 ("Senha de acesso"), kDim); pw.setJustification (juce::Justification::centred);
         pw.setFont (fontOf (16.f)); pw.onReturnKey = [this] { submit(); };
         remember.setToggleState (true, juce::dontSendNotification); remember.setButtonText (T8 ("Lembrar neste computador"));
-        enter.setButtonText ("Entrar"); enter.onClick = [this] { submit(); };
+        enter.setButtonText (T8 ("Entrar")); enter.onClick = [this] { submit(); };
         msg.setJustificationType (juce::Justification::centred); msg.setFont (fontOf (12.f)); msg.setColour (juce::Label::textColourId, kRed);
         addAndMakeVisible (pw); addAndMakeVisible (remember); addAndMakeVisible (enter); addAndMakeVisible (msg);
     }
+    void refreshLanguage() { pw.setTextToShowWhenEmpty (T8 ("Senha de acesso"), pqui::kDim); enter.setButtonText (T8 ("Entrar")); remember.setButtonText (T8 ("Lembrar neste computador")); msg.setText ({}, juce::dontSendNotification); repaint(); }
     void resized() override
     {
         auto r = getLocalBounds().withSizeKeepingCentre (380, 300).reduced (30, 0);
@@ -484,8 +486,8 @@ private:
     {
         if (busy) return;
         const juce::String pass = pw.getText();
-        if (pass.trim().isEmpty()) { msg.setText ("Escreva a senha.", juce::dontSendNotification); return; }
-        busy = true; enter.setEnabled (false); msg.setColour (juce::Label::textColourId, pqui::kDim); msg.setText ("A verificar...", juce::dontSendNotification);
+        if (pass.trim().isEmpty()) { msg.setText (T8 ("Escreva a senha."), juce::dontSendNotification); return; }
+        busy = true; enter.setEnabled (false); msg.setColour (juce::Label::textColourId, pqui::kDim); msg.setText (T8 ("A verificar..."), juce::dontSendNotification);
         const bool rem = remember.getToggleState(); juce::Component::SafePointer<LoginOverlay> safe (this);
         juce::Thread::launch ([safe, pass, rem]
         {
@@ -503,7 +505,7 @@ private:
                 const auto res = AccessManager::get().applyLogin (m, rem);
                 if (res == AccessManager::LoginResult::Ok) { safe->pw.clear(); safe->msg.setText ({}, juce::dontSendNotification); if (safe->onOk) safe->onOk(); }
                 else if (res == AccessManager::LoginResult::Expired) safe->msg.setText (pqui::T8 ("Esta senha beta já expirou."), juce::dontSendNotification);
-                else safe->msg.setText ("Senha incorreta.", juce::dontSendNotification);
+                else safe->msg.setText (T8 ("Senha incorreta."), juce::dontSendNotification);
             });
         });
     }
@@ -524,14 +526,43 @@ public:
     MixPanel& getMix() { return mix; }
     AbxPanel& getAbx() { return abx; }
     OnboardingOverlay& getGuide() { return guide; }
+    void changeLanguage (int l) { setLanguage (l); }
     void showAbx (bool s) { abxBtn.setToggleState (s, juce::dontSendNotification); abx.setActive (s); resized(); }
     void showSmart (bool s) { smartBtn.setToggleState (s, juce::dontSendNotification); smart.setVisible (s && ! mix.isVisible()); resized(); }
 private:
     void timerCallback() override;
     void applyMode();
+    // --- idioma (PT/EN): o texto-fonte e PT; guarda-se o PT de cada rotulo/tooltip e re-traduz ao mudar ---
+    struct PtGuard { PtGuard() { pqui::i18n::forcePt() = true; } };
+    static void captureRec (juce::Component& c)
+    {
+        if (auto* b = dynamic_cast<juce::Button*> (&c)) c.getProperties().set ("pt_b", b->getButtonText());
+        if (auto* l = dynamic_cast<juce::Label*> (&c)) c.getProperties().set ("pt_l", l->getText());
+        if (auto* t = dynamic_cast<juce::SettableTooltipClient*> (&c)) c.getProperties().set ("pt_t", t->getTooltip());
+        for (auto* ch : c.getChildren()) captureRec (*ch);
+    }
+    static void applyRec (juce::Component& c)
+    {
+        using pqui::tr;
+        if (auto* b = dynamic_cast<juce::Button*> (&c)) { if (c.getProperties().contains ("pt_b")) b->setButtonText (tr (c.getProperties()["pt_b"].toString())); }
+        if (auto* l = dynamic_cast<juce::Label*> (&c)) { if (c.getProperties().contains ("pt_l")) l->setText (tr (c.getProperties()["pt_l"].toString()), juce::dontSendNotification); }
+        if (auto* t = dynamic_cast<juce::SettableTooltipClient*> (&c)) { if (c.getProperties().contains ("pt_t")) t->setTooltip (tr (c.getProperties()["pt_t"].toString())); }
+        for (auto* ch : c.getChildren()) applyRec (*ch);
+    }
+    void captureLanguage() { captureRec (*this); }
+    void applyLanguage()
+    {
+        applyRec (*this);
+        abBtn.setButtonText (proc.abSlot() == 0 ? "A" : "B"); presetBtn.setButtonText (presetName);
+        langBtn.setButtonText (pqui::i18n::lang().load() == 0 ? "PT" : "EN"); langBtn.setTooltip (pqui::i18n::lang().load() == 0 ? "Idioma: Português (clique para English)" : "Language: English (click for Português)");
+        mix.relabel(); login.refreshLanguage(); smart.refreshLanguage(); timerCallback(); repaint();
+    }
+    void setLanguage (int l) { pqui::i18n::lang() = l; AccessManager::get().setLanguage (l); applyLanguage(); }
     void presetMenu();
+    PtGuard ptGuard;   // PRIMEIRO membro: forca PT durante a construcao para capturar os textos-fonte
     PrimeqProcessor& proc; pqui::Lnf lnf;
     EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; AbxPanel abx; LoginOverlay login; OnboardingOverlay guide;
+    juce::TextButton langBtn { "PT" };
     juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
     juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, zonesBtn { "ZONAS" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;

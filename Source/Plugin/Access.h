@@ -36,6 +36,9 @@ public:
     bool pccConfigured() const { return pq::pccnet::enabled(); }
     void checkExpiry();                                              // periodicamente (thread de mensagens)
     bool onboardingSeen() const { return props->getBoolValue ("onboardDone", false); }
+    // idioma da interface: 0 = PT, 1 = EN. Sem valor guardado, segue o idioma do sistema (pt* -> PT, resto -> EN).
+    int language() const { const auto v = props->getIntValue ("lang", -1); if (v == 0 || v == 1) return v; return juce::SystemStats::getUserLanguage().startsWithIgnoreCase ("pt") ? 0 : 1; }
+    void setLanguage (int l) { props->setValue ("lang", l == 1 ? 1 : 0); props->saveIfNeeded(); }
     void setOnboardingSeen() { props->setValue ("onboardDone", true); props->saveIfNeeded(); }
     int  today() const;                                              // dia atual, com guarda contra recuo do relógio
 

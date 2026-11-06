@@ -25,11 +25,14 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     graph.onSelect = [this] (int b) { band.bind (b); };
     mix.onZones = [this] (const std::vector<OverlayZone>& z) { graph.setZones (z); zonesBtn.setVisible (! z.empty() || true); };
     addChildComponent (guide); guide.onClose = [] { AccessManager::get().setOnboardingSeen(); };
+    addAndMakeVisible (langBtn); langBtn.onClick = [this] { setLanguage (pqui::i18n::lang().load() == 0 ? 1 : 0); };
     addAndMakeVisible (helpBtn); helpBtn.setTooltip (pqui::T8 ("Guia rápido")); helpBtn.onClick = [this] { guide.open(); resized(); };
     addChildComponent (abx); addAndMakeVisible (abxBtn); abxBtn.setTooltip ("Teste ABX cego: original vs processado, loudness igualado"); abxBtn.onClick = [this] { showAbx (abxBtn.getToggleState()); };
     addAndMakeVisible (zonesBtn); zonesBtn.setToggleState (true, juce::dontSendNotification); zonesBtn.setTooltip (pqui::T8 ("Mostra no gráfico as zonas de masking e espaço detectadas pelo Assistente")); zonesBtn.onClick = [this] { graph.showZones = zonesBtn.getToggleState(); graph.repaint(); };
     addChildComponent (login); wasUnlocked = AccessManager::get().isUnlocked(); login.setVisible (! wasUnlocked); lastSel = 0; logoutBtn.setVisible (wasUnlocked && ! AccessManager::inTrial());
     applyMode();
+    captureLanguage(); pqui::i18n::forcePt() = false;
+    pqui::i18n::lang() = AccessManager::get().language(); applyLanguage();
     setResizable (true, true); setResizeLimits (1000, 740, 2600, 1700);
     setSize (proc.uiWidth, proc.uiHeight);
     startTimerHz (30);
@@ -54,7 +57,7 @@ void PrimeqEditor::resized()
     head.removeFromLeft (220);
     presetBtn.setBounds (head.removeFromLeft (170)); head.removeFromLeft (6);
     undoBtn.setBounds (head.removeFromLeft (52)); head.removeFromLeft (4); redoBtn.setBounds (head.removeFromLeft (52)); head.removeFromLeft (6); abBtn.setBounds (head.removeFromLeft (38));
-    logoutBtn.setBounds (head.removeFromRight (54)); head.removeFromRight (6); helpBtn.setBounds (head.removeFromRight (30)); head.removeFromRight (6); smartBtn.setBounds (head.removeFromRight (100)); head.removeFromRight (6); mixBtn.setBounds (head.removeFromRight (110)); head.removeFromRight (6); zonesBtn.setBounds (head.removeFromRight (74)); head.removeFromRight (6); abxBtn.setBounds (head.removeFromRight (56)); head.removeFromRight (6); modeBox.setBounds (head.removeFromRight (96)); head.removeFromRight (6); bypassBtn.setBounds (head.removeFromRight (84)); head.removeFromRight (10);
+    langBtn.setBounds (head.removeFromRight (40)); head.removeFromRight (6); logoutBtn.setBounds (head.removeFromRight (54)); head.removeFromRight (6); helpBtn.setBounds (head.removeFromRight (30)); head.removeFromRight (6); smartBtn.setBounds (head.removeFromRight (100)); head.removeFromRight (6); mixBtn.setBounds (head.removeFromRight (110)); head.removeFromRight (6); zonesBtn.setBounds (head.removeFromRight (74)); head.removeFromRight (6); abxBtn.setBounds (head.removeFromRight (56)); head.removeFromRight (6); modeBox.setBounds (head.removeFromRight (96)); head.removeFromRight (6); bypassBtn.setBounds (head.removeFromRight (84)); head.removeFromRight (10);
     phaseBox.setBounds (head.removeFromRight (150)); phaseLbl.setBounds (head.removeFromRight (40));
     r.removeFromTop (6);
     r.removeFromBottom (14);
@@ -99,18 +102,18 @@ void PrimeqEditor::presetMenu()
         }
         for (int i : geral) f.addItem (i + 1, juce::String (juce::CharPointer_UTF8 (fp[(size_t) i].name))); f.addSeparator();
         for (const auto& c : order) f.addSubMenu (c, cats[c]); }
-    m.addSubMenu ("Fabrica", f);
+    m.addSubMenu (pqui::T8 ("Fabrica"), f);
     juce::PopupMenu u; const auto names = proc.userPresetNames(); for (int i = 0; i < names.size(); ++i) u.addItem (1000 + i, names[i]);
-    if (names.isEmpty()) u.addItem (-1, "(vazio)", false); m.addSubMenu ("Utilizador", u);
-    m.addSeparator(); m.addItem (9000, "Guardar preset...");
+    if (names.isEmpty()) u.addItem (-1, pqui::T8 ("(vazio)"), false); m.addSubMenu (pqui::T8 ("Utilizador"), u);
+    m.addSeparator(); m.addItem (9000, pqui::T8 ("Guardar preset..."));
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (presetBtn), [this, names] (int r)
     {
         if (r >= 1 && r < 1000) { proc.loadFactoryPreset (r - 1); presetName = juce::String (juce::CharPointer_UTF8 (PrimeqProcessor::factoryPresets()[(size_t) r - 1].name)); presetBtn.setButtonText (presetName); }
         else if (r >= 1000 && r < 9000) { if (proc.loadUserPreset (names[r - 1000])) { presetName = names[r - 1000]; presetBtn.setButtonText (presetName); } }
         else if (r == 9000)
         {
-            auto* w = new juce::AlertWindow ("Guardar preset", "Nome do preset:", juce::MessageBoxIconType::NoIcon);
-            w->addTextEditor ("name", presetName, ""); w->addButton ("Guardar", 1, juce::KeyPress (juce::KeyPress::returnKey)); w->addButton ("Cancelar", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+            auto* w = new juce::AlertWindow (pqui::T8 ("Guardar preset"), pqui::T8 ("Nome do preset:"), juce::MessageBoxIconType::NoIcon);
+            w->addTextEditor ("name", presetName, ""); w->addButton (pqui::T8 ("Guardar"), 1, juce::KeyPress (juce::KeyPress::returnKey)); w->addButton (pqui::T8 ("Cancelar"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
             w->enterModalState (true, juce::ModalCallbackFunction::create ([this, w] (int res) {
                 if (res == 1) { const auto n = w->getTextEditorContents ("name").trim(); if (n.isNotEmpty()) { proc.saveUserPreset (n); presetName = n; presetBtn.setButtonText (n); } } }), true);
         }

@@ -453,6 +453,18 @@ int main()
         o.gotoPage (5); { int nb = 0; for (auto* c : o.getChildren()) if (auto* b = dynamic_cast<juce::TextButton*> (c)) { ++nb; if (b->getButtonText().startsWith ("Come") && b->onClick) b->onClick(); } (void) nb; }
         CHECK (closed && ! o.isVisible(), "Onboarding: 'Come\xC3\xA7""ar' no ultimo passo fecha o guia e notifica");
     }
+    // 22) idioma PT/EN: dicionario, troca imediata e persistencia
+    {
+        using pqui::T8;
+        pqui::i18n::lang() = 0; CHECK (T8 ("Guia rápido") == juce::String (juce::CharPointer_UTF8 ("Guia r\xC3\xA1pido")), "i18n PT: texto-fonte intacto");
+        pqui::i18n::lang() = 1; CHECK (T8 ("Guia rápido") == "Quick guide" && T8 ("Texto sem entrada") == "Texto sem entrada", "i18n EN: traduz e deixa passar o que nao esta no dicionario");
+        CHECK (pqui::tr (juce::String (juce::CharPointer_UTF8 ("ESPA\xC3\x87O"))) == "SPACE", "i18n EN: tr() de texto em tempo de execucao");
+        auto p = make (48000.0, 512, false); auto ed = std::unique_ptr<juce::AudioProcessorEditor> (p->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get());
+        pqui::i18n::lang() = 0; pe->changeLanguage (1); CHECK (pqui::i18n::lang().load() == 1 && AccessManager::get().language() == 1, "i18n: changeLanguage(EN) aplica e persiste");
+        { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("editor_en.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+        pe->changeLanguage (0); CHECK (pqui::i18n::lang().load() == 0 && AccessManager::get().language() == 0, "i18n: voltar a PT");
+        ed.reset();
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }
