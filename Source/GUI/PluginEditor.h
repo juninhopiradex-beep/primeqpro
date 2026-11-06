@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — editor: cabecalho, grafico, inspector de banda, tira global, Smart Ops, login
+//  PrimEQ Pro by Piradex — editor: cabecalho, grafico, inspector de banda, tira global, Smart Ops, login
 // =============================================================================
 #pragma once
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -670,7 +670,7 @@ public:
         auto card = getLocalBounds().withSizeKeepingCentre (380, 300).toFloat();
         g.setColour (kPanel); g.fillRoundedRectangle (card, 18.f); g.setColour (kLine); g.drawRoundedRectangle (card.reduced (0.5f), 18.f, 1.f);
         g.setGradientFill (juce::ColourGradient (kTeal, card.getX(), card.getY(), juce::Colour (0xffe6e9ec), card.getRight(), card.getY(), false));
-        g.setFont (fontOf (34.f, true)); g.drawText ("PRIMEQ PRO", card.withTrimmedTop (28.f).withHeight (46.f).toNearestInt(), juce::Justification::centred);
+        g.setFont (fontOf (34.f, true)); g.drawText ("PrimEQ Pro", card.withTrimmedTop (28.f).withHeight (46.f).toNearestInt(), juce::Justification::centred);
         g.setColour (kDim); g.setFont (fontOf (12.f)); g.drawText (T8 ("by Piradex  ·  Parametric + Dynamic EQ"), card.withTrimmedTop (76.f).withHeight (18.f).toNearestInt(), juce::Justification::centred);
     }
 private:
@@ -714,19 +714,14 @@ public:
     void resized() override;
     EqGraph& getGraph() { return graph; }
     void selectBand (int b) { graph.select (b); }
-    // ---- pre-visualizacao de organizacao da GUI: 0 classico, 1 = A (cabecalho limpo + FERRAMENTAS + EXPERT), 2 = B (barra lateral), 3 = C (abas por cima da banda)
-    static int& layoutPref() { static int v = 0; return v; }
-    bool fxWanted() const { return layoutMode == 0 ? proc.uiMode != 0 : expertBtn.getToggleState(); }
-    void setLayout (int m) { layoutMode = juce::jlimit (0, 4, m); layoutPref() = layoutMode; applyLayout(); }
-    void applyLayout();
-    // posicao do medidor no modo B+C: 0 = cartao SAIDA, 1 = esquerda do espectro, 2 = por baixo, 3 = direita
-    void setMeterPos (int m);
-    int getMeterPos() const { return meterPos; }
+    // ---- organizacao da GUI: barra lateral de ferramentas, banda + SAIDA numa linha, gaveta EXPERT com 4 cartoes e medidor de saida a direita
+    bool fxWanted() const { return expertBtn.getToggleState(); }
+    void setExpert (bool on) { expertBtn.setToggleState (on, juce::dontSendNotification); proc.uiMode = on ? 2 : 1; applyMode(); }
+    bool isExpert() const { return expertBtn.getToggleState(); }
+    bool meterShown() const { return outMeter.isVisible(); }
+    bool langIsEn() const { return langEn.getToggleState(); }
     void pumpMeter() { if (outMeter.isVisible()) outMeter.tick(); strip.tick(); }   // usado nos testes (sem timer)
     void updateBottom();   // visibilidade dos paineis inferiores (modo 4 = B + gaveta EXPERT)
-    void setExpert (bool on) { expertBtn.setToggleState (on, juce::dontSendNotification); applyMode(); }
-    int getLayoutMode() const { return layoutMode; }
-    void toolsMenu();
     void updateOverlays() { graph.setVisible (! mix.isVisible() && ! map3d.isVisible() && ! vmix.isVisible()); }
     void showMap (bool s)
     {
@@ -785,7 +780,7 @@ private:
     {
         applyRec (*this); abx.relabel(); studio.refreshLanguage();
         abBtn.setButtonText (proc.abSlot() == 0 ? "A" : "B"); presetBtn.setButtonText (presetName);
-        langBtn.setButtonText (pqui::i18n::lang().load() == 0 ? "PT" : "EN"); langBtn.setTooltip (pqui::i18n::lang().load() == 0 ? "Idioma: Português (clique para English)" : "Language: English (click for Português)");
+        { const bool en = pqui::i18n::lang().load() != 0; langPt.setToggleState (! en, juce::dontSendNotification); langEn.setToggleState (en, juce::dontSendNotification); langPt.setTooltip (en ? "Português" : "Idioma: Português"); langEn.setTooltip (en ? "Language: English" : "English"); }
         mix.relabel(); login.refreshLanguage(); smart.refreshLanguage(); timerCallback(); repaint();
     }
     void setLanguage (int l) { pqui::i18n::lang() = l; AccessManager::get().setLanguage (l); applyLanguage(); }
@@ -802,9 +797,9 @@ private:
     PtGuard ptGuard;   // PRIMEIRO membro: forca PT durante a construcao para capturar os textos-fonte
     PrimeqProcessor& proc; pqui::Lnf lnf;
     EqGraph graph; BandPanel band, bandDyn; GlobalStrip strip, stripAn; FxPanel fx, fx2; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; pqui::MixMap3D map3d; pqui::VisualMixer vmix; LoginOverlay login; OnboardingOverlay guide;
-    juce::TextButton langBtn { "PT" }, skinBtn { "PRIME" }, toolsBtn { "FERRAMENTAS" }, layoutBtn { "LAYOUT" }; juce::ToggleButton expertBtn { "EXPERT" }; int layoutMode = 0; int meterPos = 0; LevelMeter outMeter; juce::TextButton meterBtn { "MEDIDOR" };
+    juce::TextButton langPt { "PT" }, langEn { "EN" }, skinBtn { "PRIME" }; juce::ToggleButton expertBtn { "EXPERT" }; LevelMeter outMeter;
     juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
-    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "ZONAS" }, mapBtn { "MAPA 3D" }, vmixBtn { "MIXER" }, collBtn { "COLETIVO" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
+    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "ZONAS" }, mapBtn { "MAPA 3D" }, vmixBtn { "MIXER" }, collBtn { "COLETIVO" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;
     juce::String presetName { "Init (Flat)" }; bool wasUnlocked = true; int lastSel = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrimeqEditor)

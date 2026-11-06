@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — separacao espectral Transiente / Tonal (HPSS por medianas, Fitzgerald 2010)
+//  PrimEQ Pro by Piradex — separacao espectral Transiente / Tonal (HPSS por medianas, Fitzgerald 2010)
 //  C++ puro, sem alocacoes no processamento. STFT de 2048 com hop 512 (75 %), janela raiz-de-Hann.
 //  A magnitude do canal medio e filtrada por mediana no TEMPO (realca o tonal/sustentado) e na FREQUENCIA (realca o transiente);
 //  a mascara suave P^b / (P^b + H^b) (b = 1..4 pela "separacao") reparte cada bin. Transiente = Y, Tonal = x - Y, por isso T + S = x exato.

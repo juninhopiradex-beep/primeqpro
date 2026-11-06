@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — grafico principal: espectro pre/post (FFT real), curvas calculadas dos COEFICIENTES
+//  PrimEQ Pro by Piradex — grafico principal: espectro pre/post (FFT real), curvas calculadas dos COEFICIENTES
 //  atuais (inclui ganho dinamico), nos interativos. Nada aqui e desenhado por splines desligadas do DSP.
 // =============================================================================
 #pragma once

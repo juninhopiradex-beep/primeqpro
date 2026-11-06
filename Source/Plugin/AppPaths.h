@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — pastas do utilizador (definicoes, sessao lembrada)
+//  PrimEQ Pro by Piradex — pastas do utilizador (definicoes, sessao lembrada)
 //  macOS ~/Library/Application Support/Piradex/PRIMEQpro · Windows %APPDATA%\Piradex\PRIMEQpro
 // =============================================================================
 #pragma once

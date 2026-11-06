@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — ASSISTENTE: pistas da sessao + 5 separadores
+//  PrimEQ Pro by Piradex — ASSISTENTE: pistas da sessao + 5 separadores
 //    Masking (conflitos e comparacao EQ/Dinamica/Sidechain) · Espaco (mapa frequencia x panorama, mono safety, M/S)
 //    Doutor (sintoma -> evidencias -> hipoteses -> acoes) · Intencao (Clarity/Punch/Warmth/Space/Smooth) · Cenarios (A/B/C com metricas)
 //  Modos: Simple (Intencao + Masking) · Advanced (+ Espaco + Doutor) · Expert (+ Cenarios + relatorio)
@@ -90,7 +90,7 @@ public:
     juce::String buildReport() const
     {
         juce::String r; const auto nl = "\n";
-        r << "# PRIMEQ PRO by Piradex - relatorio do Assistente" << nl << nl << "Estimativas sobre niveis medidos (25 ms) e estatisticas L/R. Nao substitui a escuta." << nl << nl << "## Pistas" << nl;
+        r << "# PrimEQ Pro by Piradex - relatorio do Assistente" << nl << nl << "Estimativas sobre niveis medidos (25 ms) e estatisticas L/R. Nao substitui a escuta." << nl << nl << "## Pistas" << nl;
         for (size_t i = 0; i < tracks.size(); ++i) r << "- " << tracks[i].name << " | prioridade " << tracks[i].priority << " | " << pq::srcKindName (i < space.kind.size() ? space.kind[i] : pq::SrcKind::Stereo) << " | corr " << juce::String (tracks[i].st.corrAll, 2) << " | perda mono " << juce::String (-tracks[i].st.monoLossAll, 1) << " dB | crista " << juce::String (tracks[i].st.crestDb, 1) << " dB" << nl;
         r << nl << "## Masking" << nl; if (! res.message.empty()) r << res.message << nl;
         for (const auto& p : res.pairs) { r << "### " << nameOf (p.protectedIdx) << " (protegida) -> " << nameOf (p.victimIdx) << " | melhor metodo: " << pq::methodLabel (p.best) << nl;
@@ -287,14 +287,14 @@ private:
             auto cp = chipPri (r); g.setColour (kLine); g.fillRoundedRectangle (cp.toFloat(), 5.f); txt (g, "P" + juce::String (t.priority), cp, 11.f, kText, true, juce::Justification::centred);
             auto co = chipOn (r); g.setColour (t.analysing ? kTealDim : kLine); g.fillRoundedRectangle (co.toFloat(), 5.f); txt (g, t.analysing ? "A ANALISAR" : "ANALISAR", co, 10.f, t.analysing ? kTeal : kDim, true, juce::Justification::centred);
         }
-        if (rows.empty()) txt (g, T8 ("(sem pistas — abra o PRIMEQ PRO em mais pistas)"), { 14, 62, 300, 20 }, 11.f, kDim);
+        if (rows.empty()) txt (g, T8 ("(sem pistas — abra o PrimEQ Pro em mais pistas)"), { 14, 62, 300, 20 }, 11.f, kDim);
         wrap (g, T8 ("Só vê instâncias no mesmo processo do anfitrião. A medição é opt-in (usa CPU)."), { 14, getHeight() - 132, 304, 40 }, 10.f, kDim);
         const auto ss = status; wrap (g, ss, { 14, getHeight() - 182, 304, 46 }, 10.f, kText, 4);
     }
     void paintTabs (juce::Graphics& g)
     {
         using namespace pqui; for (const auto& t : tabRects()) { const bool sel = t.first == (int) tab; g.setColour (sel ? kTealDim : kLine); g.fillRoundedRectangle (t.second.toFloat(), 6.f); txt (g, T8 (tabName (t.first)), t.second, 11.f, sel ? kTeal : kDim, true, juce::Justification::centred); }
-        txt (g, proc.uiMode == 0 ? "MODO SIMPLE" : (proc.uiMode == 1 ? "MODO ADVANCED" : "MODO EXPERT"), rightArea().withHeight (40).reduced (14, 8), 10.f, kDim, false, juce::Justification::centredRight);
+        txt (g, proc.uiMode < 2 ? "MODO NORMAL" : "MODO EXPERT", rightArea().withHeight (40).reduced (14, 8), 10.f, kDim, false, juce::Justification::centredRight);
     }
     static float fxHz (double f, juce::Rectangle<float> r) { return r.getX() + (float) (std::log (f / 80.0) / std::log (12000.0 / 80.0)) * r.getWidth(); }
 
@@ -346,7 +346,7 @@ private:
         using namespace pqui; auto r = maskGuide(); r.removeFromBottom (36); if (r.getHeight() < 30) return; g.setColour (kPanel2); g.fillRoundedRectangle (r.toFloat(), 8.f); auto in = r.reduced (12, 8);
         txt (g, "COMO LIGAR NO DAW", in.removeFromTop (16), 12.f, kText, true);
         const juce::String P = pr ? nameOf (pr->protectedIdx) : juce::String ("protegida"), V = pr ? nameOf (pr->victimIdx) : juce::String ("cede");
-        wrap (g, T8 ("EQ e Dinâmica: sem routing — o corte é feito na pista \"") + V + T8 ("\".\nSidechain: em \"") + V + T8 ("\" ative a entrada sidechain do PRIMEQ PRO e envie-lhe o áudio de \"") + P + T8 ("\". Logic: menu Side Chain · Ableton: Audio From › sidechain · Cubase: Ativar Side-Chain + Send · Pro Tools: Key Input (bus) · Reaper: send para canais 3/4 · FL Studio: Sidechain to this track · Studio One: Sidechain no plugin. Aplicar já liga \"scext\"."), in, 10.f, kDim, 5);
+        wrap (g, T8 ("EQ e Dinâmica: sem routing — o corte é feito na pista \"") + V + T8 ("\".\nSidechain: em \"") + V + T8 ("\" ative a entrada sidechain do PrimEQ Pro e envie-lhe o áudio de \"") + P + T8 ("\". Logic: menu Side Chain · Ableton: Audio From › sidechain · Cubase: Ativar Side-Chain + Send · Pro Tools: Key Input (bus) · Reaper: send para canais 3/4 · FL Studio: Sidechain to this track · Studio One: Sidechain no plugin. Aplicar já liga \"scext\"."), in, 10.f, kDim, 5);
     }
 
     // ---------- ESPACO

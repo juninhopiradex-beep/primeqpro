@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — criptografia mínima (C++17 puro, testável sem JUCE)
+//  PrimEQ Pro by Piradex — criptografia mínima (C++17 puro, testável sem JUCE)
 //  SHA-256, HMAC-SHA256, PBKDF2-HMAC-SHA256, cifra de fluxo SHA-256-CTR e Base32.
 // =============================================================================
 #pragma once

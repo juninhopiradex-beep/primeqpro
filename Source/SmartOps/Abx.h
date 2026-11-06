@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — logica do teste ABX cego (pura, testavel)
+//  PrimEQ Pro by Piradex — logica do teste ABX cego (pura, testavel)
 //  A = som original (EQ ignorado), B = som processado (com compensacao de nivel). Em cada tentativa o X e
 //  sorteado em segredo; o utilizador diz se X e A ou B. No fim: acertos, p-valor binomial unilateral
 //  (probabilidade de acertar >= k por sorte, p0 = 0.5) e veredicto.

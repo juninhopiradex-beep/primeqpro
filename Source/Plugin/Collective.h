@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — vista colectiva das pistas (mesmo processo): niveis medios por banda, pan e zonas de choque.
+//  PrimEQ Pro by Piradex — vista colectiva das pistas (mesmo processo): niveis medios por banda, pan e zonas de choque.
 //  Logica pura (sem JUCE): serve o Mapa 3D e o overlay colectivo do grafico. So considera instancias com "ANALISAR" ligado.
 // =============================================================================
 #pragma once

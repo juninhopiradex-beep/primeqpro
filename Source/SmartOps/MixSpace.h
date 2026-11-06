@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — Spatial Frequency Intelligence (deterministico, sem ML)
+//  PrimEQ Pro by Piradex — Spatial Frequency Intelligence (deterministico, sem ML)
 //
 //  Entrada: por pista, curva P50 por banda (MixResult.curve) e estatisticas espaciais (panorama, correlacao, perda em mono).
 //  Saida: tipo de fonte, achados (centro congestionado, risco mono, corte so no Mid) e propostas EQ aplicaveis.

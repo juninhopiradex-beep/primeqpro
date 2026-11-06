@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — Smart Ops: confianca MEDIDA das propostas (deterministica, sem IA)
+//  PrimEQ Pro by Piradex — Smart Ops: confianca MEDIDA das propostas (deterministica, sem IA)
 //
 //  O material aprendido e dividido em blocos alternados de 1 s (metade A = segundos pares, metade B = impares): mesma musica, momentos
 //  diferentes. A proposta e recalculada em cada metade e compara-se (fiabilidade split-half). Score 0..1 =

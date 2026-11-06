@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — teste ABX cego (A = original, B = processado, X = um dos dois, sorteado em segredo)
+//  PrimEQ Pro by Piradex — teste ABX cego (A = original, B = processado, X = um dos dois, sorteado em segredo)
 //  Loudness igualado (compensa a diferenca de nivel medida entre original e processado) para o ouvido nao ser
 //  enganado por "mais forte = melhor". Resultado com p-valor binomial. Ver SmartOps/Abx.h.
 // =============================================================================

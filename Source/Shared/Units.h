@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — conversao de texto digitado com unidades (virgula decimal aceite) — C++ puro
+//  PrimEQ Pro by Piradex — conversao de texto digitado com unidades (virgula decimal aceite) — C++ puro
 //  "1,5k" "1.5 kHz" "440" "a4" "c#3" -> Hz ; "-3,5 dB" -> dB ; "10 ms" "0,5 s" -> ms
 // =============================================================================
 #pragma once

@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — Mix Unmask: analise de mascaramento entre pistas e comparacao de metodos (deterministico)
+//  PrimEQ Pro by Piradex — Mix Unmask: analise de mascaramento entre pistas e comparacao de metodos (deterministico)
 //
 //  Entrada: para cada pista, os quadros (25 ms) de nivel por banda (28 bandas) dos ultimos segundos.
 //  Para cada par (P = pista PROTEGIDA, V = a que cede; decide a prioridade) e cada banda b:

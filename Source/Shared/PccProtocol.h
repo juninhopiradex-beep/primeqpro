@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — protocolo do PCC (Plugin Control Central), parte pura (sem JUCE, testavel)
+//  PrimEQ Pro by Piradex — protocolo do PCC (Plugin Control Central), parte pura (sem JUCE, testavel)
 //
 //  Pedido   POST {PCC}/functions/v1/validate   (JSON)
 //     { "product":"PRIMEQPRO", "version":"1.3.0", "machineId":"...", "keyHash":"sha256(chave|PRIMEQPRO)", "nonce":"<hex>" }

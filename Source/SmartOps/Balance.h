@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — Balance Assistant do Visual Mixer: ponto de partida de nivel, pan e largura (deterministico, sem IA)
+//  PrimEQ Pro by Piradex — Balance Assistant do Visual Mixer: ponto de partida de nivel, pan e largura (deterministico, sem IA)
 //  Entrada: nivel medido de cada pista analisada (RMS dB, ANALISAR ligado), prioridade (5 = voz, 3 = baixo, ...) e se e kick.
 //  Regras: voz = 0 dB (referencia); alvos relativos a voz: kick -4, baixo -5, prioridade 4 -6, 2 -9, 1 -12 dB. O ganho proposto
 //  e (alvo - diferenca medida), limitado a [-18, +9] dB. Kick, baixo e voz ficam ao centro (baixo/kick com largura 60 %);

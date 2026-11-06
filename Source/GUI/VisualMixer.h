@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — VISUAL MIXER: superficie 2D de controlo de todas as pistas (mesmo processo)
+//  PrimEQ Pro by Piradex — VISUAL MIXER: superficie 2D de controlo de todas as pistas (mesmo processo)
 //  X = pan (-100..+100 %), Y = ganho da pista (-24..+12 dB, parametro "Output Gain"), largura do no = Width (0..200 %, M/S).
 //  Arrastar o no altera a pista; arrastar as pontas altera a largura; duplo clique repoe (0 dB, centro, 100 %).
 //  Snapshots A/B/C (Set guarda, letra repoe), Balance Assistant (proposta com Desfazer). Aneis vermelhos = pistas em choque (do Mapa 3D).
@@ -82,7 +82,7 @@ public:
         for (float d = kYTop; d >= kYBot - 0.1f; d -= 6.f) { const float y = yOf (d); g.setColour (std::fabs (d) < 0.1f ? kGrid.brighter (0.7f) : kGrid); g.drawHorizontalLine ((int) y, pl.getX(), pl.getRight()); g.setColour (kDim); g.drawText (juce::String ((int) d) + " dB", (int) pl.getX() + 4, (int) y - 12, 50, 12, juce::Justification::centredLeft, false); }
         g.setColour (kGrid.brighter (0.5f)); g.drawVerticalLine ((int) xOf (0.f), pl.getY(), pl.getBottom());
         g.setColour (kDim); g.setFont (fontOf (13.f, true)); g.drawText ("L", (int) pl.getX() + 6, (int) pl.getCentreY() - 8, 16, 16, juce::Justification::centred, false); g.drawText ("R", (int) pl.getRight() - 22, (int) pl.getCentreY() - 8, 16, 16, juce::Justification::centred, false);
-        if (nd.empty()) { g.setColour (kDim); g.setFont (fontOf (12.f)); g.drawFittedText (T8 ("Sem pistas: abre o PRIMEQ PRO nas pistas do projecto (mesmo processo da DAW)."), pl.toNearestInt().reduced (60), juce::Justification::centred, 2); }
+        if (nd.empty()) { g.setColour (kDim); g.setFont (fontOf (12.f)); g.drawFittedText (T8 ("Sem pistas: abre o PrimEQ Pro nas pistas do projecto (mesmo processo da DAW)."), pl.toNearestInt().reduced (60), juce::Justification::centred, 2); }
         for (const auto& n : nd) drawNode (g, n);
         // lista
         g.setColour (kPanel2); g.fillRoundedRectangle (listArea().toFloat(), 6.f);

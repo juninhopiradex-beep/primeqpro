@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — Mix Doctor: sintoma -> evidencias MEDIDAS -> hipoteses -> acoes (regras DSP deterministicas, V1)
+//  PrimEQ Pro by Piradex — Mix Doctor: sintoma -> evidencias MEDIDAS -> hipoteses -> acoes (regras DSP deterministicas, V1)
 //
 //  Regras do dossie: separar evidencia observada de hipotese; sem probabilidades inventadas — etiquetas
 //  "a investigar" / "compativel com os dados" / "nao confirmado"; o que o plugin nao mede e dito como tal.

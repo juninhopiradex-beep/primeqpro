@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — FFT complexa radix-2 em double (C++ puro)
+//  PrimEQ Pro by Piradex — FFT complexa radix-2 em double (C++ puro)
 //  Usada pelo analisador, pelo desenho dos filtros FIR e pelos testes. Nunca na thread de audio sem pre-alocacao.
 // =============================================================================
 #pragma once

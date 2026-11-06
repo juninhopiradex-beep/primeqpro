@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — sobreamostragem 1x/2x/4x com meia-banda FIR de fase linear (C++ puro)
+//  PrimEQ Pro by Piradex — sobreamostragem 1x/2x/4x com meia-banda FIR de fase linear (C++ puro)
 //
 //  Cada etapa 2x usa um filtro half-band de 49 taps (janela Kaiser, beta=8). Atraso de grupo exato:
 //    2x: 24 amostras (base)   4x: 36 amostras (base)   — numeros inteiros, declarados ao anfitriao.

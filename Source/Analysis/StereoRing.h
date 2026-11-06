@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — anel SPSC lock-free (audio -> GUI), pre-alocado, sem mutex
+//  PrimEQ Pro by Piradex — anel SPSC lock-free (audio -> GUI), pre-alocado, sem mutex
 // =============================================================================
 #pragma once
 #include <atomic>

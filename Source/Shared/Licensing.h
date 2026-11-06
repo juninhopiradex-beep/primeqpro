@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — regras de acesso (puras, sem JUCE, testáveis)
+//  PrimEQ Pro by Piradex — regras de acesso (puras, sem JUCE, testáveis)
 //
 //   • Duas senhas: MASTER (não expira) e BETA (válida até ao fim de uma data).
 //   • Só se guardam salt + hash PBKDF2-HMAC-SHA256 (nunca a senha em claro).

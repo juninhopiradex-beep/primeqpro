@@ -538,7 +538,7 @@ void PrimeqProcessor::setStateInformation (const void* data, int size)
     if (xml->hasTagName ("PRIMEQPRO"))
     {
         uiWidth = std::clamp (xml->getIntAttribute ("uiW", uiWidth), 760, 3000); uiHeight = std::clamp (xml->getIntAttribute ("uiH", uiHeight), 480, 2000);
-        slot = xml->getIntAttribute ("slot", 0) & 1; uiMode = std::clamp (xml->getIntAttribute ("mode", 1), 0, 2); pq::MixRegistry::get().setGroup (mixSlotId, xml->getIntAttribute ("mixGroup", 1));
+        slot = xml->getIntAttribute ("slot", 0) & 1; uiMode = std::clamp (xml->getIntAttribute ("mode", 1), 1, 2);   // 1 = normal, 2 = EXPERT (o modo Simple desapareceu) pq::MixRegistry::get().setGroup (mixSlotId, xml->getIntAttribute ("mixGroup", 1));
         if (xml->hasAttribute ("mixName")) { auto& rg = pq::MixRegistry::get(); nameByUser = xml->getIntAttribute ("mixUser", 0) != 0; if (nameByUser) rg.setName (mixSlotId, xml->getStringAttribute ("mixName").toStdString()); rg.setPriority (mixSlotId, xml->getIntAttribute ("mixPri", 2)); rg.setAnalysing (mixSlotId, xml->getIntAttribute ("mixOn", 0) != 0, sr); }
         if (auto* ds = xml->getChildByName ("DECISIONS"))
         {

@@ -1,4 +1,4 @@
-# PRIMEQ PRO by Piradex
+# PrimEQ Pro by Piradex
 
 EQ profissional paramétrico + dinâmico (Beatfreak Music · Plugins by Piradex). C++20 / JUCE 8.
 

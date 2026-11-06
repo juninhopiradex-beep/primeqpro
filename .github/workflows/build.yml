@@ -1,4 +1,4 @@
-name: Build PRIMEQ PRO (testes + macOS VST3/AU + Windows VST3 + instaladores)
+name: Build PrimEQ Pro (testes + macOS VST3/AU + Windows VST3 + instaladores)
 
 on:
   push:
@@ -96,7 +96,7 @@ jobs:
 
       - name: Verificar binarios (arquitecturas e minimo do macOS)
         run: |
-          for b in "out/PRIMEQ PRO by Piradex.vst3/Contents/MacOS/PRIMEQ PRO by Piradex" "out/PRIMEQ PRO by Piradex.component/Contents/MacOS/PRIMEQ PRO by Piradex"; do
+          for b in "out/PrimEQ Pro by Piradex.vst3/Contents/MacOS/PrimEQ Pro by Piradex" "out/PrimEQ Pro by Piradex.component/Contents/MacOS/PrimEQ Pro by Piradex"; do
             echo "== $b"; lipo -archs "$b"; otool -l "$b" | grep -A3 -E "LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX" | grep -E "minos|version" | head -4
           done 2>&1 | tee binary-check.log
 
@@ -141,7 +141,7 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
-          cp -R "out/PRIMEQ PRO by Piradex.component" "$HOME/Library/Audio/Plug-Ins/Components/"
+          cp -R "out/PrimEQ Pro by Piradex.component" "$HOME/Library/Audio/Plug-Ins/Components/"
           killall -9 AudioComponentRegistrar 2>/dev/null || true
           auval -a | grep -i "PxPQ" || true
           auval -v aufx PxPQ Prdx 2>&1 | tee auval.log
@@ -153,7 +153,7 @@ jobs:
           curl -sL -o pv.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
           unzip -q pv.zip
           set +e
-          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --timeout-ms 180000 "out/PRIMEQ PRO by Piradex.vst3" 2>&1 | tee pluginval-mac.log
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --timeout-ms 180000 "out/PrimEQ Pro by Piradex.vst3" 2>&1 | tee pluginval-mac.log
           rc=${PIPESTATUS[0]}; echo "pluginval exit=$rc"; exit $rc
 
       - name: Zip dos plugins
@@ -165,8 +165,8 @@ jobs:
         run: |
           set -e
           mkdir -p pkgroot/vst3 pkgroot/au build-pkg
-          cp -R "out/PRIMEQ PRO by Piradex.vst3"      pkgroot/vst3/
-          cp -R "out/PRIMEQ PRO by Piradex.component" pkgroot/au/
+          cp -R "out/PrimEQ Pro by Piradex.vst3"      pkgroot/vst3/
+          cp -R "out/PrimEQ Pro by Piradex.component" pkgroot/au/
           chmod +x Packaging/macos/scripts/postinstall
           pkgbuild --identifier com.beatfreak.primeqpro.vst3 --version "$VER" --install-location "/Library/Audio/Plug-Ins/VST3" --root pkgroot/vst3 build-pkg/vst3.pkg
           pkgbuild --identifier com.beatfreak.primeqpro.au   --version "$VER" --install-location "/Library/Audio/Plug-Ins/Components" --scripts Packaging/macos/scripts --root pkgroot/au build-pkg/au.pkg
@@ -231,11 +231,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path out | Out-Null
-          $vst3 = Get-ChildItem -Path C:/b -Recurse -Directory -Filter "PRIMEQ PRO by Piradex.vst3" | Select-Object -First 1
+          $vst3 = Get-ChildItem -Path C:/b -Recurse -Directory -Filter "PrimEQ Pro by Piradex.vst3" | Select-Object -First 1
           if (-not $vst3) { throw "VST3 nao encontrado" }
-          Copy-Item -Recurse -Force $vst3.FullName "out\PRIMEQ PRO by Piradex.vst3"
-          $exe = Get-ChildItem -Path C:/b -Recurse -File -Filter "PRIMEQ PRO by Piradex.exe" | Select-Object -First 1
-          if ($exe) { Copy-Item $exe.FullName "out\PRIMEQ PRO by Piradex (Standalone).exe" }
+          Copy-Item -Recurse -Force $vst3.FullName "out\PrimEQ Pro by Piradex.vst3"
+          $exe = Get-ChildItem -Path C:/b -Recurse -File -Filter "PrimEQ Pro by Piradex.exe" | Select-Object -First 1
+          if ($exe) { Copy-Item $exe.FullName "out\PrimEQ Pro by Piradex (Standalone).exe" }
           Get-ChildItem -Recurse out | Select-Object FullName, Length
       - name: pluginval (VST3, strictness 5)
         shell: pwsh
@@ -243,7 +243,7 @@ jobs:
         run: |
           Invoke-WebRequest -Uri https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip -OutFile pv.zip
           Expand-Archive pv.zip -DestinationPath pv
-          & .\pv\pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 180000 "out\PRIMEQ PRO by Piradex.vst3" 2>&1 | Tee-Object -FilePath pluginval-win.log
+          & .\pv\pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 180000 "out\PrimEQ Pro by Piradex.vst3" 2>&1 | Tee-Object -FilePath pluginval-win.log
           exit $LASTEXITCODE
       - name: Zip
         shell: pwsh
@@ -253,7 +253,7 @@ jobs:
         run: |
           choco install innosetup -y --no-progress
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          & $iscc "/DVST3SRC=$PWD\out\PRIMEQ PRO by Piradex.vst3" "/DOUTDIR=$PWD" Packaging\windows\PRIMEQpro.iss
+          & $iscc "/DVST3SRC=$PWD\out\PrimEQ Pro by Piradex.vst3" "/DOUTDIR=$PWD" Packaging\windows\PRIMEQpro.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem PRIMEQPRO-*-Setup.exe
       - uses: actions/upload-artifact@v4
@@ -282,7 +282,7 @@ jobs:
           echo "VER=$VER" >> $GITHUB_ENV
           cd dist && rm -f *.log && sha256sum PRIMEQPRO-* > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
           {
-            echo "PRIMEQ PRO by Piradex v$VER (commit ${GITHUB_SHA::7})"
+            echo "PrimEQ Pro by Piradex v$VER (commit ${GITHUB_SHA::7})"
             echo
             echo "- macOS: PRIMEQPRO-$VER-macOS.pkg (VST3 + AU, universal Intel/Apple Silicon, macOS 10.13+) e .zip para instalacao manual"
             echo "- Windows: PRIMEQPRO-$VER-Windows-Setup.exe (VST3 x64) e .zip"
@@ -294,7 +294,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VER }}
-          name: PRIMEQ PRO by Piradex v${{ env.VER }}
+          name: PrimEQ Pro by Piradex v${{ env.VER }}
           body_path: RELEASE_NOTES.md
           files: |
             dist/PRIMEQPRO-*

@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — Morph entre dois estados de EQ (A e B) guardados pelo utilizador
+//  PrimEQ Pro by Piradex — Morph entre dois estados de EQ (A e B) guardados pelo utilizador
 //
 //  Interpolacao por banda, m em [0,1] (0 = A, 1 = B):
 //    freq, Q, ratio, attack, hold(+1), release : geometrica (log) ; ganho, threshold, range, knee : linear ;

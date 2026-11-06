@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — presets de fabrica ORIGINAIS (organizados por categoria, "Categoria/Nome")
+//  PrimEQ Pro by Piradex — presets de fabrica ORIGINAIS (organizados por categoria, "Categoria/Nome")
 //
 //  Pontos de partida baseados em praticas gerais de mistura/masterizacao e no repertorio local (Kizomba, Semba, Kuduro, Amapiano, Afrobeat).
 //  Sao ponto de partida: ajuste sempre de ouvido. Nenhum valor foi copiado de produtos de terceiros.

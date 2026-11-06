@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — desenho dos kernels FIR para os modos Natural e Linear Phase
+//  PrimEQ Pro by Piradex — desenho dos kernels FIR para os modos Natural e Linear Phase
 //
 //  Definicao matematica (a mesma resposta de magnitude do modo Zero Latency):
 //     Hb^alpha(w) = |Hb(w)| * exp( j * alpha * phi_b(w) )     phi_b = fase DESENROLADA do IIR da banda b

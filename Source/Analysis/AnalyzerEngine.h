@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — analisador FFT real (pre/post) e captura do Smart Ops
+//  PrimEQ Pro by Piradex — analisador FFT real (pre/post) e captura do Smart Ops
 //  A thread de audio so escreve nos aneis (push). Toda a FFT corre na thread da GUI (update()).
 //  O analisador visual nunca altera o sinal.
 // =============================================================================

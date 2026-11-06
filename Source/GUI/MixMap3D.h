@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — MAPA 3D da mistura: frequencia (x) · nivel relativo (y) · pista ou pan (z)
+//  PrimEQ Pro by Piradex — MAPA 3D da mistura: frequencia (x) · nivel relativo (y) · pista ou pan (z)
 //  Projecao em perspectiva feita a mao (sem OpenGL). Arrastar = rodar, roda = zoom, duplo clique = repor.
 //  Faixas vermelhas = bandas onde duas ou mais pistas fortes competem. So mostra instancias com ANALISAR ligado (mesmo processo).
 // =============================================================================
@@ -44,7 +44,7 @@ public:
         if (n == 0)
         {
             g.setColour (kText); g.setFont (fontOf (14.f, true)); g.drawFittedText (T8 ("Sem pistas para mostrar"), getLocalBounds().withSizeKeepingCentre (getWidth() - 80, 24).translated (0, -20), juce::Justification::centred, 1);
-            g.setColour (kDim); g.setFont (fontOf (12.f)); g.drawFittedText (T8 ("Liga ANALISAR nesta pista e noutras instâncias do PRIMEQ PRO no mesmo projecto, e põe-nas a tocar. Cada pista aparece aqui em 3D."), getLocalBounds().withSizeKeepingCentre (getWidth() - 120, 60).translated (0, 24), juce::Justification::centred, 3);
+            g.setColour (kDim); g.setFont (fontOf (12.f)); g.drawFittedText (T8 ("Liga ANALISAR nesta pista e noutras instâncias do PrimEQ Pro no mesmo projecto, e põe-nas a tocar. Cada pista aparece aqui em 3D."), getLocalBounds().withSizeKeepingCentre (getWidth() - 120, 60).translated (0, 24), juce::Justification::centred, 3);
             paintChrome (g, n); return;
         }
 

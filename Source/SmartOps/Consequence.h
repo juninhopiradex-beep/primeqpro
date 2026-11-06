@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — Mix Consequence Engine (V1): 3 cenarios por decisao, com impactos MENSURAVEIS
+//  PrimEQ Pro by Piradex — Mix Consequence Engine (V1): 3 cenarios por decisao, com impactos MENSURAVEIS
 //
 //  Par (P protegida, V cede) e os seus conflitos. Os cenarios sao simulados sobre os MESMOS quadros de nivel por banda (25 ms):
 //    A = corte estatico em V (EQ)           B = corte coordenado: so quando P toca (sidechain)

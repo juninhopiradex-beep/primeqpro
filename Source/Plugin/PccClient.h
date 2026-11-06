@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — cliente do PCC (Plugin Control Central, Supabase)
+//  PrimEQ Pro by Piradex — cliente do PCC (Plugin Control Central, Supabase)
 //  Contrato e assinatura: ver Source/Shared/PccProtocol.h. Ligado quando o build define PQ_PCC_URL e PQ_PCC_PUBKEY
 //  (cmake -DPQ_PCC_URL=https://xxxx.supabase.co -DPQ_PCC_PUBKEY=<64 hex>). Sem eles o PCC fica desligado.
 //  NUNCA chamar nas threads de audio ou de mensagens: faz rede (bloqueante, timeout 8 s).

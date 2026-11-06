@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — Intent-Based EQ: objetivo musical -> estrategia DSP explicita e editavel (deterministico)
+//  PrimEQ Pro by Piradex — Intent-Based EQ: objetivo musical -> estrategia DSP explicita e editavel (deterministico)
 //
 //  Cada intencao devolve bandas NORMAIS do EQ (frequencia/Q/ganho/tipo/dinamica) + explicacao + previsao do efeito sobre a curva
 //  medida da pista (resposta dos filtros somada a curva P50). Ganhos limitados a +-4 dB. Com medicao, a intensidade e ajustada

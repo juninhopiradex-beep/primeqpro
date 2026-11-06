@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — Smart Ops: perfis (presets) por fonte e objetivo
+//  PrimEQ Pro by Piradex — Smart Ops: perfis (presets) por fonte e objetivo
 //  Cada perfil e so um conjunto de valores iniciais dos controlos (editaveis) + uma gama de frequencias onde as propostas sao aceites.
 //  a/b/c: Deresonate = sensibilidade dB / corte max dB / bandas; De-Ess = percentil % / reducao max dB / -;
 //         Unmask = conflito min dB / corte max dB / bandas; Match = forca % / ganho max dB / bandas.

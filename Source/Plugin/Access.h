@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — acesso: login (Master / Beta com validade)
+//  PrimEQ Pro by Piradex — acesso: login (Master / Beta com validade)
 //  Mesmo motor dos outros plugins Piradex (PBKDF2-HMAC-SHA256, 60000 iteracoes, master unica + betas com validade,
 //  periodo aberto ate 31/12/2026, guarda contra recuo do relogio, sessao lembrada por maquina).
 //  A verificacao e lenta de proposito: nunca chamar na thread de audio nem na de mensagens.

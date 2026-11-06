@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — Smart Ops: Deresonate (motor deterministico, SEM aprendizagem automatica)
+//  PrimEQ Pro by Piradex — Smart Ops: Deresonate (motor deterministico, SEM aprendizagem automatica)
 //
 //  Sequencia: Learn (>= 2 s, acumula o espectro medio) -> Stop -> Preview (curva tracejada) -> Apply -> Revert.
 //  Nenhum audio e alterado ate "Apply". Algoritmo: espectro medio de potencia (dB) -> linha de base = envolvente

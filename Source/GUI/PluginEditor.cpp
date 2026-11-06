@@ -9,7 +9,7 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
 {
     if (AccessManager::get().pccConfigured()) juce::Thread::launch ([] { AccessManager::get().revalidatePcc(); });   // 1x/dia, em segundo plano
     openEditors().push_back (this); setLookAndFeel (&lnf);
-    addAndMakeVisible (graph); addAndMakeVisible (band); addAndMakeVisible (strip); addAndMakeVisible (fx); addChildComponent (bandDyn); addChildComponent (stripAn); addChildComponent (fx2); bandDyn.setPart (2); stripAn.setPart (2); fx2.setPart (2); addChildComponent (smart); addChildComponent (mix); addAndMakeVisible (mixBtn); addAndMakeVisible (modeBox); modeBox.addItem ("Simple", 1); modeBox.addItem ("Advanced", 2); modeBox.addItem ("Expert", 3); modeBox.setSelectedId (proc.uiMode + 1, juce::dontSendNotification); modeBox.onChange = [this] { proc.uiMode = modeBox.getSelectedId() - 1; applyMode(); }; modeBox.setTooltip (pqui::T8 ("Simple: essencial · Advanced: tudo · Expert: + cenários e relatório"));
+    addAndMakeVisible (graph); addAndMakeVisible (band); addAndMakeVisible (strip); addAndMakeVisible (fx); addChildComponent (bandDyn); addChildComponent (stripAn); addChildComponent (fx2); bandDyn.setPart (2); stripAn.setPart (2); fx2.setPart (2); addChildComponent (smart); addChildComponent (mix); addAndMakeVisible (mixBtn);
     for (auto* b : { &presetBtn, &undoBtn, &redoBtn, &abBtn, &logoutBtn }) addAndMakeVisible (b);
     addAndMakeVisible (bypassBtn); addAndMakeVisible (smartBtn); addAndMakeVisible (phaseBox); addAndMakeVisible (phaseLbl);
     if (auto* pc = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter ("phase"))) phaseBox.addItemList (pc->choices, 1);
@@ -32,17 +32,17 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     addChildComponent (guide); guide.onClose = [] { AccessManager::get().setOnboardingSeen(); };
     addAndMakeVisible (skinBtn); skinBtn.setButtonText (pqui::skinName (shownSkin)); skinBtn.setTooltip (juce::String (juce::CharPointer_UTF8 ("Cor / skin: Prime, Ouro, \xC3\x8D""ndigo (seguro para daltonismo)")));
     skinBtn.onClick = [this] { changeSkin ((pqui::skinIndex() + 1) % 3); };
-    addAndMakeVisible (langBtn); langBtn.onClick = [this] { setLanguage (pqui::i18n::lang().load() == 0 ? 1 : 0); };
+    for (auto* b : { &langPt, &langEn }) { addAndMakeVisible (b); b->setClickingTogglesState (false); }
+    langPt.onClick = [this] { setLanguage (0); }; langEn.onClick = [this] { setLanguage (1); };
     addAndMakeVisible (helpBtn); helpBtn.setTooltip (pqui::T8 ("Guia rápido")); helpBtn.onClick = [this] { guide.open(); resized(); };
     addChildComponent (studio); addAndMakeVisible (studioBtn); studioBtn.setTooltip (juce::String (juce::CharPointer_UTF8 ("Alvo por g\xC3\xA9nero, Tradutor, Palavras, Cofre de decis\xC3\xB5""es e Ensino"))); studioBtn.onClick = [this] { showStudio (studioBtn.getToggleState()); };
     addChildComponent (abx); addAndMakeVisible (abxBtn); abxBtn.setTooltip ("Teste ABX cego: original vs processado, loudness igualado"); abxBtn.onClick = [this] { showAbx (abxBtn.getToggleState()); };
     addAndMakeVisible (zonesBtn); zonesBtn.setToggleState (true, juce::dontSendNotification); zonesBtn.setTooltip (pqui::T8 ("Mostra no gráfico as zonas de masking e espaço detectadas pelo Assistente")); zonesBtn.onClick = [this] { graph.showZones = zonesBtn.getToggleState(); graph.repaint(); };
-    addChildComponent (toolsBtn); toolsBtn.onClick = [this] { toolsMenu(); };
-    addChildComponent (expertBtn); expertBtn.setClickingTogglesState (true); expertBtn.setTooltip (pqui::T8 ("EXPERT: mostra De-harsh, Carácter, Oversampling, Lookahead e T/S")); expertBtn.onClick = [this] { applyMode(); };
-    addAndMakeVisible (layoutBtn); layoutBtn.setTooltip ("Pre-visualizacao da organizacao: Classico, A, B, C, B+C"); layoutBtn.onClick = [this] { setLayout ((layoutMode + 1) % 5); };
+    addAndMakeVisible (expertBtn); expertBtn.setClickingTogglesState (true); expertBtn.setToggleState (proc.uiMode >= 2, juce::dontSendNotification); expertBtn.setTooltip (pqui::T8 ("EXPERT: abre a gaveta com Dinâmica, De-harsh, Carácter, Oversampling, Lookahead, T/S e Análise; liga também os cenários e o relatório do Assistente")); expertBtn.onClick = [this] { proc.uiMode = expertBtn.getToggleState() ? 2 : 1; applyMode(); };
     addChildComponent (login); wasUnlocked = AccessManager::get().isUnlocked(); login.setVisible (! wasUnlocked); lastSel = 0; logoutBtn.setVisible (wasUnlocked && ! AccessManager::inTrial());
-    addChildComponent (outMeter); addChildComponent (meterBtn); meterBtn.setTooltip ("Posicao do medidor de saida: cartao, esquerda, por baixo ou direita do espectro"); meterBtn.onClick = [this] { setMeterPos ((meterPos + 1) % 4); };
-    layoutMode = layoutPref(); applyLayout();
+    addAndMakeVisible (outMeter); outMeter.setStyle (false, true);
+    band.setPart (1); strip.setPart (1); fx.setPart (1); strip.setShowMeter (false);
+    applyMode();
     captureLanguage(); pqui::i18n::forcePt() = false;
     pqui::i18n::lang() = AccessManager::get().language(); applyLanguage();
     setResizable (true, true); setResizeLimits (1100, 740, 2600, 1700);
@@ -60,8 +60,8 @@ void PrimeqEditor::paint (juce::Graphics& g)
       juce::ColourGradient ln (kTeal.withAlpha (0.0f), 0.f, 0.f, kTeal.withAlpha (0.0f), (float) getWidth(), 0.f, false); ln.addColour (0.12, kTeal.withAlpha (0.75f)); ln.addColour (0.5, kTeal.withAlpha (0.18f));
       g.setGradientFill (ln); g.fillRect (0.f, 45.f, (float) getWidth(), 1.5f); }
     g.setGradientFill (juce::ColourGradient (kTeal, 18.f, 8.f, kText, 190.f, 8.f, false));
-    g.setFont (fontOf (22.f, true)); g.drawText ("PRIMEQ PRO", 16, 6, 150, 34, juce::Justification::centredLeft);
-    g.setColour (kDim); g.setFont (fontOf (11.f)); g.drawText ("by Piradex", 148, 12, 80, 28, juce::Justification::centredLeft);
+    g.setFont (fontOf (22.f, true)); g.drawText ("PrimEQ Pro", 16, 6, 150, 34, juce::Justification::centredLeft);
+    g.setColour (kDim); g.setFont (fontOf (11.f)); g.drawText ("by Piradex", 132, 12, 80, 28, juce::Justification::centredLeft);
     g.setColour (kDim); g.setFont (fontOf (11.f));
     g.drawText (AccessManager::get().roleText() + "   v" + juce::String (JucePlugin_VersionString), getWidth() - 330, getHeight() - 16, 320, 14, juce::Justification::centredRight);
 }
@@ -74,10 +74,7 @@ void PrimeqEditor::resized()
         // cabecalho adaptativo: larguras ideais reduzidas proporcionalmente quando a janela e estreita (nada fica a largura zero)
         struct It { juce::Component* c; int w; }; const int gap = 4;
         std::vector<It> left { { &presetBtn, 128 }, { &undoBtn, 46 }, { &redoBtn, 46 }, { &abBtn, 34 } };
-        std::vector<It> right;
-        if (layoutMode == 0) right = { { &layoutBtn, 66 }, { &langBtn, 38 }, { &skinBtn, 64 }, { &logoutBtn, logoutBtn.isVisible() ? 48 : 0 }, { &helpBtn, 28 }, { &smartBtn, smartBtn.isVisible() ? 86 : 0 }, { &studioBtn, 74 }, { &mixBtn, 94 }, { &vmixBtn, 62 }, { &mapBtn, 72 }, { &collBtn, 78 }, { &zonesBtn, 58 },
-                                       { &abxBtn, 44 }, { &modeBox, 82 }, { &bypassBtn, 74 }, { &phaseBox, 108 }, { &phaseLbl, 34 } };
-        else right = { { &layoutBtn, 66 }, { &meterBtn, meterBtn.isVisible() ? 92 : 0 }, { &langBtn, 38 }, { &skinBtn, 64 }, { &logoutBtn, logoutBtn.isVisible() ? 48 : 0 }, { &helpBtn, 28 }, { &expertBtn, 84 }, { &toolsBtn, layoutMode == 1 ? 124 : 0 }, { &bypassBtn, 74 }, { &phaseBox, 108 }, { &phaseLbl, 34 } };
+        std::vector<It> right { { &langEn, 36 }, { &langPt, 36 }, { &skinBtn, 64 }, { &logoutBtn, logoutBtn.isVisible() ? 48 : 0 }, { &helpBtn, 28 }, { &expertBtn, 84 }, { &bypassBtn, 74 }, { &phaseBox, 108 }, { &phaseLbl, 44 } };
         int logoW = 208, sum = logoW; int n = 0; for (auto& i : left) { sum += i.w; ++n; } for (auto& i : right) if (i.w > 0) { sum += i.w; ++n; }
         sum += gap * n; const double sc = std::min (1.0, (double) head.getWidth() / (double) sum);
         head.removeFromLeft ((int) (logoW * sc));
@@ -87,33 +84,17 @@ void PrimeqEditor::resized()
     r.removeFromTop (6);
     r.removeFromBottom (14);
     std::array<juce::Component*, 8> tl { &smartBtn, &studioBtn, &mixBtn, &vmixBtn, &mapBtn, &collBtn, &zonesBtn, &abxBtn };
-    if (layoutMode == 2 || layoutMode == 4) { auto rail = r.removeFromLeft (112); r.removeFromLeft (8); for (auto* c : tl) { c->setBounds (rail.removeFromTop (40)); rail.removeFromTop (6); } }
-    auto placeTabs = [&] (juce::Rectangle<int> row) { const int n = (int) tl.size(); for (int i = 0; i < n; ++i) tl[(size_t) i]->setBounds (row.getX() + row.getWidth() * i / n + 2, row.getY(), row.getWidth() / n - 4, row.getHeight()); };
-    if (mix.isVisible()) { if (layoutMode == 3) { placeTabs (r.removeFromBottom (32)); r.removeFromBottom (6); } mix.setBounds (r); login.setBounds (getLocalBounds()); proc.uiWidth = getWidth(); proc.uiHeight = getHeight(); return; }
-    if (layoutMode == 4)
+    { auto rail = r.removeFromLeft (112); r.removeFromLeft (8); for (auto* c : tl) { c->setBounds (rail.removeFromTop (40)); rail.removeFromTop (6); } }
+    if (mix.isVisible()) { mix.setBounds (r); login.setBounds (getLocalBounds()); proc.uiWidth = getWidth(); proc.uiHeight = getHeight(); return; }
+    if (fxWanted())
     {
-        if (fxWanted())
-        {
-            auto dr = r.removeFromBottom (200); r.removeFromBottom (6); const int cw = (dr.getWidth() - 3 * 6) / 4;
-            for (auto* c : std::initializer_list<juce::Component*> { &bandDyn, &fx, &fx2, &stripAn }) { c->setBounds (dr.removeFromLeft (cw)); dr.removeFromLeft (6); }
-        }
-        auto row = r.removeFromBottom (150); r.removeFromBottom (6); strip.setBounds (row.removeFromRight (300)); row.removeFromRight (6); band.setBounds (row);
+        auto dr = r.removeFromBottom (200); r.removeFromBottom (6); const int cw = (dr.getWidth() - 3 * 6) / 4;
+        for (auto* c : std::initializer_list<juce::Component*> { &bandDyn, &fx, &fx2, &stripAn }) { c->setBounds (dr.removeFromLeft (cw)); dr.removeFromLeft (6); }
     }
-    else
-    {
-    strip.setBounds (r.removeFromBottom (70)); r.removeFromBottom (6);
-    if (fx.isVisible()) { fx.setBounds (r.removeFromBottom (92)); r.removeFromBottom (6); }
-    band.setBounds (r.removeFromBottom (176)); r.removeFromBottom (6);
-    }
-    if (layoutMode == 3) { placeTabs (r.removeFromBottom (32)); r.removeFromBottom (6); }
+    { auto row = r.removeFromBottom (150); r.removeFromBottom (6); strip.setBounds (row.removeFromRight (300)); row.removeFromRight (6); band.setBounds (row); }
     if (smart.isVisible()) { smart.setBounds (r.removeFromRight (290)); r.removeFromRight (6); }
     if (studio.isVisible()) { studio.setBounds (r.removeFromRight (360)); r.removeFromRight (6); }
-    if (layoutMode == 4)
-    {
-        if (meterPos == 1) { outMeter.setBounds (r.removeFromLeft (60)); r.removeFromLeft (6); }
-        else if (meterPos == 3) { outMeter.setBounds (r.removeFromRight (60)); r.removeFromRight (6); }
-        else if (meterPos == 2) { outMeter.setBounds (r.removeFromBottom (40)); r.removeFromBottom (4); }
-    }
+    outMeter.setBounds (r.removeFromRight (60)); r.removeFromRight (6);
     graph.setBounds (r); map3d.setBounds (r); vmix.setBounds (r); if (map3d.isVisible()) map3d.toFront (false); if (vmix.isVisible()) vmix.toFront (false);
     abx.setBounds (r.getRight() - 470, r.getY() + 10, 460, 352); abx.toFront (false);
     login.setBounds (getLocalBounds()); guide.setBounds (getLocalBounds()); if (guide.isVisible()) guide.toFront (false); else if (login.isVisible()) login.toFront (false);
@@ -122,44 +103,13 @@ void PrimeqEditor::resized()
 
 void PrimeqEditor::applyMode()
 {
-    const bool simple = proc.uiMode == 0;
-    if (layoutMode == 0) { smartBtn.setVisible (! simple); if (simple) { smart.setVisible (false); smartBtn.setToggleState (false, juce::dontSendNotification); } }
     updateBottom(); resized();
 }
 
 void PrimeqEditor::updateBottom()
 {
-    const bool m = ! mix.isVisible(), c = layoutMode == 4, fxv = m && fxWanted();
-    band.setVisible (m); strip.setVisible (m); fx.setVisible (fxv); fx2.setVisible (fxv && c); bandDyn.setVisible (fxv && c); stripAn.setVisible (fxv && c);
-    outMeter.setVisible (m && c && meterPos > 0); meterBtn.setVisible (c);
-}
-
-void PrimeqEditor::setMeterPos (int m)
-{
-    meterPos = juce::jlimit (0, 3, m);
-    static const char* nm[4] = { "MED: CARTAO", "MED: ESQ", "MED: BAIXO", "MED: DIR" }; meterBtn.setButtonText (nm[meterPos]);
-    outMeter.setStyle (meterPos == 2, true);
-    strip.setShowMeter (layoutMode != 4 || meterPos == 0);
-    updateBottom(); resized();
-}
-
-void PrimeqEditor::applyLayout()
-{
-    const bool simple = proc.uiMode == 0;
-    for (auto* t : std::initializer_list<juce::Button*> { &studioBtn, &mixBtn, &vmixBtn, &mapBtn, &collBtn, &zonesBtn, &abxBtn }) t->setVisible (layoutMode != 1);
-    smartBtn.setVisible (layoutMode == 0 ? ! simple : layoutMode >= 2);
-    toolsBtn.setVisible (layoutMode == 1); expertBtn.setVisible (layoutMode != 0); modeBox.setVisible (layoutMode == 0);
-    static const char* nm[5] = { "CLASSICO", "LAYOUT A", "LAYOUT B", "LAYOUT C", "B + C" }; layoutBtn.setButtonText (nm[layoutMode]);
-    { const int pt = layoutMode == 4 ? 1 : 0; band.setPart (pt); strip.setPart (pt); fx.setPart (pt); strip.setShowMeter (layoutMode != 4 || meterPos == 0); outMeter.setStyle (meterPos == 2, true); meterBtn.setButtonText (juce::StringArray { "MED: CARTAO", "MED: ESQ", "MED: BAIXO", "MED: DIR" }[meterPos]); }
-    applyMode();
-}
-
-void PrimeqEditor::toolsMenu()
-{
-    std::array<juce::Button*, 8> t { &smartBtn, &studioBtn, &mixBtn, &vmixBtn, &mapBtn, &collBtn, &zonesBtn, &abxBtn };
-    juce::PopupMenu m; for (size_t i = 0; i < t.size(); ++i) m.addItem ((int) i + 1, t[i]->getButtonText(), true, t[i]->getToggleState());
-    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (toolsBtn), [this, t] (int r)
-    { if (r < 1) return; auto* b = t[(size_t) r - 1]; b->setToggleState (! b->getToggleState(), juce::dontSendNotification); if (b->onClick) b->onClick(); });
+    const bool m = ! mix.isVisible(), fxv = m && fxWanted();
+    band.setVisible (m); strip.setVisible (m); fx.setVisible (fxv); fx2.setVisible (fxv); bandDyn.setVisible (fxv); stripAn.setVisible (fxv); outMeter.setVisible (m);
 }
 
 void PrimeqEditor::timerCallback()
@@ -169,7 +119,7 @@ void PrimeqEditor::timerCallback()
     if (unlocked && ! login.isVisible() && ! guide.isVisible() && ! AccessManager::get().onboardingSeen()) { guide.open(); resized(); }
     if (unlocked != wasUnlocked || lastSel < 0) { wasUnlocked = unlocked; login.setVisible (! unlocked); logoutBtn.setVisible (unlocked && ! AccessManager::inTrial()); login.toFront (false); repaint(); lastSel = 0; }
     if (! unlocked) return;
-    graph.tick(); if (outMeter.isVisible()) outMeter.tick(); band.refresh(); strip.tick(); fx.tick(); if (layoutMode == 4 && fxWanted()) { bandDyn.refresh(); stripAn.tick(); fx2.tick(); } smart.tick(); if (mix.isVisible()) mix.tick();
+    graph.tick(); if (outMeter.isVisible()) outMeter.tick(); band.refresh(); strip.tick(); fx.tick(); if (fxWanted()) { bandDyn.refresh(); stripAn.tick(); fx2.tick(); } smart.tick(); if (mix.isVisible()) mix.tick();
     undoBtn.setEnabled (proc.undo.canUndo()); redoBtn.setEnabled (proc.undo.canRedo());
 }
 

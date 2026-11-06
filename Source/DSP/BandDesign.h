@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — desenho dos filtros de banda (double) e resposta analitica
+//  PrimEQ Pro by Piradex — desenho dos filtros de banda (double) e resposta analitica
 //
 //  • Peaking / shelves / notch / band-pass / all-pass: formulas RBJ (Audio EQ Cookbook), forma com Q.
 //  • HP / LP: cascata de Butterworth (6..96 dB/oct) + modo "Brickwall" FINITO = Butterworth de ordem 32

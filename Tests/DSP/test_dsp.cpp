@@ -1,4 +1,4 @@
-// Testes DSP do PRIMEQ PRO (C++ puro, sem JUCE): respostas analiticas vs medidas, identidade, M/S, dinamica,
+// Testes DSP do PrimEQ Pro (C++ puro, sem JUCE): respostas analiticas vs medidas, identidade, M/S, dinamica,
 // sidechain, estabilidade, FFT, FIR (simetria / magnitude), Deresonate e CPU.
 #include "../../Source/Shared/PccProtocol.h"
 #include "../../Source/Shared/Licensing.h"

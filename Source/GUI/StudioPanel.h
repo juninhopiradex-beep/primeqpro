@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — painel STUDIO: alvo por genero, Tradutor, Palavras, Cofre de decisoes (+ficha, assinatura), Ensino
+//  PrimEQ Pro by Piradex — painel STUDIO: alvo por genero, Tradutor, Palavras, Cofre de decisoes (+ficha, assinatura), Ensino
 //  Tudo deterministico (ver SmartOps/Studio.h). As curvas vem da medicao desta pista (ANALISAR ligado); sem medicao o painel diz-o.
 // =============================================================================
 #pragma once

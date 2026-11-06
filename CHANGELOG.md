@@ -1,4 +1,11 @@
 # Changelog
+## 1.10.0 — NOVA INTERFACE
+- **Nome**: o produto passa a chamar-se **PrimEQ Pro by Piradex** (cabeçalho, bundle VST3/AU, instaladores e documentação). O código de plugin, o BUNDLE_ID, as sessões guardadas e a licença não mudam: as sessões antigas abrem normalmente.
+- **Interface reorganizada**: barra lateral esquerda com as ferramentas (Smart Ops, Studio, Assistente, Mixer, Mapa 3D, Coletivo, Zonas, ABX); em baixo, uma só linha com a banda seleccionada (Freq/Gain/Q grandes, tipo, DYN, Listen/Copiar/Colar/Apagar) e o cartão SAÍDA (output, Auto Gain, Delta, Sidechain).
+- **EXPERT** (botão no topo) abre uma gaveta com 4 cartões: DINÂMICA, DE-HARSH, CARÁCTER · T/S e ANÁLISE · MEDIÇÃO (FFT, Vista, Tilt, Escala, Peak Hold, Freeze, latência/CPU). O estado fica guardado na sessão. Substitui o menu Simple/Advanced/Expert (o antigo modo Simple desapareceu; as sessões antigas abrem em normal ou EXPERT). EXPERT liga também Cenários e o relatório do Assistente.
+- **Medidor de saída L/R** à direita do espectro, com escala e CLIP; só um medidor lê o nível de cada vez.
+- **Idioma**: botões **PT | EN** sempre visíveis no cabeçalho (o activo fica destacado); a escolha é guardada.
+- Limites assumidos: janela mínima 1100×740 (os knobs ficam apertados com a gaveta aberta); não testado num anfitrião real (DAW) nem com os instaladores noutras máquinas; o ficheiro do plugin passa a ter o nome com capitalização nova (o macOS e o Windows tratam-no como o mesmo caminho).
 ## 1.9.0 — VISUAL MIXER
 - **VISUAL MIXER** (botão MIXER): superfície 2D com um nó por pista (mesmo processo da DAW). **X = pan, Y = ganho da pista, extensão do nó = largura estéreo.** Arrastar o nó muda a pista; arrastar as pontas muda a largura; duplo clique repõe. Lista de pistas com valores, **Snapshots A/B/C** (Set guarda, a letra repõe) e **Balance Assistant** (ponto de partida de nível/pan/largura a partir do nível medido e das prioridades, com DESFAZER). Anéis vermelhos = pistas em choque (as mesmas do Mapa 3D). O Mapa 3D continua a diagnosticar; o Visual Mixer age.
 - Novos parâmetros por instância, guardados no estado e automatizáveis: **Track Pan** (-100..+100 %, balanço com lei cos) e **Track Width** (0..200 %, M/S). O ganho Y é o "Output Gain" já existente. Neutro (0 % / 100 %) = saída idêntica à anterior (testado).

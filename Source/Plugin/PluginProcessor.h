@@ -1,5 +1,5 @@
 // =============================================================================
-//  PRIMEQ PRO by Piradex — AudioProcessor (adaptador JUCE)
+//  PrimEQ Pro by Piradex — AudioProcessor (adaptador JUCE)
 //  Camadas: Plugin Host Adapter -> Parameter/State Model (APVTS) -> DSP (EqCore / FIR) -> Analysis -> GUI
 // =============================================================================
 #pragma once
@@ -46,7 +46,7 @@ public:
     using juce::AudioProcessor::processBlock;
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
-    const juce::String getName() const override { return "PRIMEQ PRO by Piradex"; }
+    const juce::String getName() const override { return "PrimEQ Pro by Piradex"; }
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     double getTailLengthSeconds() const override { return 0.0; }

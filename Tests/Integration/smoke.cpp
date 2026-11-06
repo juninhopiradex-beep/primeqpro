@@ -1,4 +1,4 @@
-// Teste de integracao do PRIMEQ PRO (JUCE, sem anfitriao): processa audio real pelo AudioProcessor.
+// Teste de integracao do PrimEQ Pro (JUCE, sem anfitriao): processa audio real pelo AudioProcessor.
 // Verifica: ganho medido, identidade/bypass, latencia/PDC dos 3 modos de fase, FIR vs analitico, dinamica e sidechain,
 // automacao rapida, estado/presets, mudancas de sample rate, ausencia de alocacoes na thread de audio, CPU e editor (render PNG).
 #include "Plugin/PluginProcessor.h"
@@ -611,28 +611,22 @@ int main()
         pe->changeLanguage (0); pqui::i18n::lang() = 0; pe->showMixer (false);
         { juce::MemoryBlock mb; ps[1]->getStateInformation (mb); auto q = make (48000.0, 512); q->setStateInformation (mb.getData(), (int) mb.getSize()); CHECK (std::fabs (q->getParamReal ("trk_width") - 150.f) < 0.2f, "Pan/Width guardados no estado do plugin"); }
     }
-    // 28) pre-visualizacao dos layouts A/B/C
+    // 28) interface final: barra lateral + linha da banda + gaveta EXPERT + medidor a direita + PT|EN
     {
         auto p0 = make (48000.0, 512); p0->setTrackName ("Vocals", true); std::unique_ptr<juce::AudioProcessorEditor> ed (p0->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860);
-        const char* nmL[5] = { "classico", "A", "B", "C", "BC" };
         { const auto& fp = PrimeqProcessor::factoryPresets(); for (size_t i = 0; i < fp.size(); ++i) if (juce::String (fp[i].name).containsIgnoreCase ("Vocal Presence")) { p0->loadFactoryPreset ((int) i); break; } }
-        { juce::Random rnd (7); juce::AudioBuffer<float> b (2, 512); juce::MidiBuffer mb; float lp = 0.f; for (int k = 0; k < 120; ++k) { for (int i = 0; i < 512; ++i) { lp += 0.12f * ((rnd.nextFloat() * 2.f - 1.f) - lp); const float v = 0.5f * lp * 4.f + 0.05f * (rnd.nextFloat() * 2.f - 1.f); b.setSample (0, i, v); b.setSample (1, i, v); } p0->processBlock (b, mb); pe->getGraph().tick(); } }
-        for (int L = 0; L < 5; ++L)
-        {
-            pe->setLayout (L); if (L > 0) { pe->setExpert (true); pe->resized(); }
-            auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f (juce::String ("layout_") + nmL[L] + ".png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo);
-            CHECK (im.getWidth() == 1240 && pe->getLayoutMode() == L, "Layout %s: snapshot gerado", nmL[L]);
-        }
-        pe->setLayout (1); pe->setExpert (false); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("layout_A_simples.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
-        pe->setLayout (4); pe->setExpert (false); pe->resized(); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("layout_BC_simples.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
-        pe->setExpert (true); pe->selectBand (1); pe->getGraph().tick(); pe->resized(); pqui::i18n::lang() = 1; pe->changeLanguage (1); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("layout_BC_en.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
-        pe->changeLanguage (0); pqui::i18n::lang() = 0; pe->setSize (1100, 740); pe->resized(); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("layout_BC_min.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
-        pe->setSize (1240, 860); pe->setLayout (4); pe->setExpert (false);
-        { const char* nmM[4] = { "cartao", "esq", "baixo", "dir" };
-          for (int m = 1; m < 4; ++m) { pe->setMeterPos (m); pe->resized(); p0->meterL.store (0.20f); p0->meterR.store (0.11f); pe->pumpMeter(); auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f (juce::String ("meter_") + nmM[m] + ".png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); CHECK (pe->getMeterPos() == m, "Medidor de saida na posicao %s", nmM[m]); }
-          pe->setMeterPos (3); pe->setExpert (true); pe->resized(); p0->meterL.store (0.20f); p0->meterR.store (0.11f); pe->pumpMeter(); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("meter_dir_expert.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
-          pe->setMeterPos (0); }
-        pe->setSize (1240, 860); pe->setLayout (0);
+        auto shot = [&] (const char* name) { p0->meterL.store (0.20f); p0->meterR.store (0.11f); pe->pumpMeter(); pe->getGraph().tick(); auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f (name); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); return im.getWidth(); };
+        CHECK (! pe->isExpert() && p0->uiMode == 1, "Interface: arranca sem EXPERT");
+        CHECK (pe->meterShown(), "Interface: medidor de saida visivel a direita");
+        CHECK (shot ("ui_final.png") == 1240, "Interface: snapshot normal");
+        pe->setExpert (true); pe->selectBand (1); pe->resized();
+        CHECK (pe->isExpert() && p0->uiMode == 2, "EXPERT abre a gaveta e fica no estado do plugin (uiMode=%d)", p0->uiMode);
+        shot ("ui_final_expert.png");
+        { juce::MemoryBlock mb; p0->getStateInformation (mb); auto q = make (48000.0, 512); q->setStateInformation (mb.getData(), (int) mb.getSize()); CHECK (q->uiMode == 2, "EXPERT guardado na sessao"); }
+        pqui::i18n::lang() = 1; pe->changeLanguage (1); CHECK (pe->langIsEn(), "Botao EN activo em ingles"); shot ("ui_final_expert_en.png");
+        pe->changeLanguage (0); pqui::i18n::lang() = 0; CHECK (! pe->langIsEn(), "Botao PT activo em portugues");
+        pe->setSize (1100, 740); pe->resized(); shot ("ui_final_min.png"); pe->setSize (1240, 860);
+        pe->setExpert (false);
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;

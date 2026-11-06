@@ -25,7 +25,7 @@ $$;
 revoke all on function public.pcc_find_license(text, text) from public, anon, authenticated;
 grant execute on function public.pcc_find_license(text, text) to service_role;
 
--- criar uma licença do PRIMEQ PRO (gera a chave; devolve-a UMA vez). Ex.:
+-- criar uma licença do PrimEQ Pro (gera a chave; devolve-a UMA vez). Ex.:
 --   select * from public.pcc_new_primeqpro_license('João Silva','joao@x.com','Angola','venda', null);
 create or replace function public.pcc_new_primeqpro_license(p_cliente text, p_email text, p_pais text, p_tipo text, p_validade date)
 returns table(chave text, validade date)

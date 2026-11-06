@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PRIMEQ PRO by Piradex — gera as senhas e o ficheiro de segredos do build (mesmo motor dos outros plugins Piradex).
+PrimEQ Pro by Piradex — gera as senhas e o ficheiro de segredos do build (mesmo motor dos outros plugins Piradex).
 
 Cria (e as senhas em claro NUNCA devem ir para o GitHub):
   Source/Shared/Secrets.h          usado pelo compilador: so salt + hash PBKDF2-HMAC-SHA256 (60000 iteracoes)
@@ -60,7 +60,7 @@ inline constexpr int kPasswordCount = (int) (sizeof (kPasswords) / sizeof (kPass
         f.write(header)
     with open(os.path.join(root, "secrets.b64"), "w") as f:
         f.write(base64.b64encode(header.encode()).decode())
-    priv = f'''PRIMEQ PRO by Piradex — SENHAS PRIVADAS  (guarda num gestor de senhas; NUNCA no GitHub)
+    priv = f'''PrimEQ Pro by Piradex — SENHAS PRIVADAS  (guarda num gestor de senhas; NUNCA no GitHub)
 =====================================================================================
 
 Senha MASTER (acesso total, nao expira):

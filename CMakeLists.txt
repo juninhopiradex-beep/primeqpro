@@ -9,7 +9,7 @@ endif()
 # Windows: runtime do Visual C++ embutido (nao precisa do VC++ Redistributable)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(PRIMEQPRO VERSION 1.9.0 LANGUAGES C CXX)
+project(PRIMEQPRO VERSION 1.10.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -44,8 +44,8 @@ juce_add_plugin(PrimeqPro
     PLUGIN_MANUFACTURER_CODE Prdx
     PLUGIN_CODE PxPQ
     FORMATS ${PQ_FORMATS}
-    PRODUCT_NAME "PRIMEQ PRO by Piradex"
-    DESCRIPTION "PRIMEQ PRO - equalizador parametrico e dinamico (24 bandas)"
+    PRODUCT_NAME "PrimEQ Pro by Piradex"
+    DESCRIPTION "PrimEQ Pro - equalizador parametrico e dinamico (24 bandas)"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
@@ -110,6 +110,6 @@ if(PQ_BUILD_SMOKE)
     target_sources(PrimeqSmoke PRIVATE Tests/Integration/smoke.cpp Source/Plugin/PluginProcessor.cpp Source/Plugin/Access.cpp Source/GUI/PluginEditor.cpp)
     target_include_directories(PrimeqSmoke PRIVATE Source)
     target_compile_definitions(PrimeqSmoke PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1 JUCE_STANDALONE_APPLICATION=1
-        JucePlugin_VersionString="${PROJECT_VERSION}" JucePlugin_Name="PRIMEQ PRO by Piradex" JUCE_PLUGINHOST_AU=0)
+        JucePlugin_VersionString="${PROJECT_VERSION}" JucePlugin_Name="PrimEQ Pro by Piradex" JUCE_PLUGINHOST_AU=0)
     target_link_libraries(PrimeqSmoke PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_dsp juce::juce_recommended_config_flags)
 endif()
