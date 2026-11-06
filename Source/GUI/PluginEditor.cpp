@@ -67,7 +67,7 @@ void PrimeqEditor::resized()
         std::vector<It> left { { &presetBtn, 128 }, { &undoBtn, 46 }, { &redoBtn, 46 }, { &abBtn, 34 } };
         std::vector<It> right { { &langBtn, 38 }, { &skinBtn, 64 }, { &logoutBtn, logoutBtn.isVisible() ? 48 : 0 }, { &helpBtn, 28 }, { &smartBtn, smartBtn.isVisible() ? 86 : 0 }, { &studioBtn, 74 }, { &mixBtn, 94 }, { &zonesBtn, 58 },
                                 { &abxBtn, 44 }, { &modeBox, 82 }, { &bypassBtn, 74 }, { &phaseBox, 108 }, { &phaseLbl, 34 } };
-        int logoW = 190, sum = logoW; int n = 0; for (auto& i : left) { sum += i.w; ++n; } for (auto& i : right) if (i.w > 0) { sum += i.w; ++n; }
+        int logoW = 208, sum = logoW; int n = 0; for (auto& i : left) { sum += i.w; ++n; } for (auto& i : right) if (i.w > 0) { sum += i.w; ++n; }
         sum += gap * n; const double sc = std::min (1.0, (double) head.getWidth() / (double) sum);
         head.removeFromLeft ((int) (logoW * sc));
         for (auto& i : left) { i.c->setBounds (head.removeFromLeft ((int) (i.w * sc))); head.removeFromLeft ((int) (gap * sc)); }
