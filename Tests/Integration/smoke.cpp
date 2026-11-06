@@ -544,6 +544,41 @@ int main()
         const int L = p->getLatencySamples(); double err = 0, ref = 0; for (int i = 48000; i < n; ++i) { const double d = out[(size_t) i] - in[(size_t) (i - L)]; err += d * d; ref += (double) in[(size_t) (i - L)] * in[(size_t) (i - L)]; }
         CHECK (10.0 * std::log10 (err / ref + 1e-30) < -60.0, "T/S espectral: banda neutra => saida igual a entrada atrasada (%.1f dB)", 10.0 * std::log10 (err / ref + 1e-30));
     }
+    // 26) Mapa 3D + overlay colectivo: varias instancias (mesmo processo) com quadros sinteticos
+    {
+        std::vector<std::unique_ptr<PrimeqProcessor>> ps; const char* nm[4] = { "Kick", "Bass", "Vocals", "Guitar" };
+        const int peakBand[4] = { 6, 7, 18, 19 }; const float peakDb[4] = { -12.f, -13.f, -14.f, -30.f };
+        for (int i = 0; i < 4; ++i)
+        {
+            ps.push_back (make (48000.0, 512)); auto& q = *ps.back(); q.setTrackName (nm[i], true); q.setAnalysing (true);
+            for (int f = 0; f < 80; ++f)
+            {
+                float db[pq::kMixBands]; for (int b = 0; b < pq::kMixBands; ++b) db[b] = peakDb[i] - 5.f * std::fabs ((float) (b - peakBand[i]));
+                db[peakBand[i]] = peakDb[i]; pq::MixRegistry::get().pushFrame (q.mixSlot(), db, peakDb[i]);
+            }
+            pq::SpatialStats st; for (int b = 0; b < pq::kMixBands; ++b) st.pan[b] = (i - 1.5f) / 2.f; pq::MixRegistry::get().pushStats (q.mixSlot(), st);
+        }
+        const auto c = pq::Collective::gather (pq::MixRegistry::get(), ps[0].get());
+        CHECK (c.tracks.size() >= 4, "Colectivo: %d pistas recolhidas", (int) c.tracks.size());
+        CHECK (std::fabs (c.refDb - (-12.f)) < 0.5f, "Colectivo: referencia = pista mais forte (%.1f dB)", c.refDb);
+        float clashKB = 0.f; for (int b = 5; b <= 8; ++b) clashKB = std::max (clashKB, c.clash[(size_t) b]);
+        CHECK (clashKB > 0.25f, "Colectivo: choque Kick/Bass detectado (sev %.2f)", clashKB);
+        CHECK (c.clash[0] < 0.01f && c.clash[27] < 0.01f, "Colectivo: sem falsos choques nos extremos");
+        { pq::Collective one; one.tracks.push_back (c.tracks[0]); pq::Collective::analyse (one); CHECK (one.clashBands == 0, "Colectivo: uma pista so nao tem choques"); }
+        std::unique_ptr<juce::AudioProcessorEditor> ed (ps[0]->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860);
+        pe->showMap (true); pe->getMap().refresh(); CHECK (pe->getMap().current().tracks.size() >= 4, "Mapa 3D: editor recolhe %d pistas", (int) pe->getMap().current().tracks.size());
+        for (int m = 0; m < 2; ++m)
+        {
+            pe->getMap().panMode = m == 1; pe->getMap().repaint(); auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f);
+            juce::File f (m ? "mapa3d_pan.png" : "mapa3d_pista.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); CHECK (im.getWidth() == 1240, "Mapa 3D: snapshot %s", m ? "pan" : "pista");
+        }
+        pe->getMap().yaw = 1.2f; pe->getMap().pitch = 0.9f; pe->getMap().repaint(); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("mapa3d_rodado.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+        pe->showMap (false); pe->getGraph().setCollective (true); pe->getGraph().tick(); pe->resized();
+        CHECK (pe->getGraph().coll.tracks.size() >= 4, "Overlay colectivo: grafico recolhe %d pistas", (int) pe->getGraph().coll.tracks.size());
+        { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("overlay_colectivo.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+        pqui::i18n::lang() = 1; pe->changeLanguage (1); pe->showMap (true); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("mapa3d_en.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+        pe->changeLanguage (0); pqui::i18n::lang() = 0; pe->showMap (false);
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }

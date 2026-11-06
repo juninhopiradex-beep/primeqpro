@@ -4,6 +4,7 @@
 // =============================================================================
 #pragma once
 #include "LookAndFeel.h"
+#include "../Plugin/Collective.h"
 #include "../Plugin/PluginProcessor.h"
 #include <functional>
 
@@ -25,11 +26,15 @@ public:
     // STUDIO: curva de desvio (pista - alvo, 28 bandas do Assistente) e zonas que o Tradutor diz desaparecerem
     void setStudioOverlay (const std::array<double, pq::kMixBands>& dev, bool hasDev, const std::vector<std::pair<double, double>>& lost) { stDev = dev; stHasDev = hasDev; stLost = lost; repaint(); }
     std::array<double, pq::kMixBands> stDev {}; bool stHasDev = false; std::vector<std::pair<double, double>> stLost;
+    // overlay colectivo: curvas normalizadas (relativas ao mais forte) das restantes pistas analisadas + zonas de choque
+    bool showColl = false; pq::Collective coll; int collTick = 0;
+    void setCollective (bool on) { showColl = on; collTick = 0; if (! on) coll = {}; repaint(); }
 
     // chamado pelo timer do editor (thread de mensagens)
     void tick()
     {
         proc.readBands (bands);
+        if (showColl && (collTick++ % 4) == 0) coll = pq::Collective::gather (pq::MixRegistry::get(), &proc, 40, false);
         for (int i = 0; i < pq::kNumBands; ++i) dyn[i] = proc.dynTel[(size_t) i].load (std::memory_order_relaxed);
         const int fi = (int) proc.getParamReal ("fftsize"); proc.analyzer.setFftSize (fi == 0 ? 2048 : (fi == 2 ? 8192 : 4096));
         proc.analyzer.update ((pq::SpecView) (int) proc.getParamReal ("specview"), proc.getParamReal ("freeze") > 0.5f, proc.getParamReal ("peakhold") > 0.5f);
@@ -126,6 +131,28 @@ public:
             }
             if (st) { fill.lineTo (lx, yOf (0.0)); fill.closeSubPath(); g.setColour (kWarn.withAlpha (0.16f)); g.fillPath (fill); g.setColour (kWarn.withAlpha (0.95f)); g.strokePath (line, juce::PathStrokeType (1.8f));
                       g.setFont (fontOf (9.5f)); g.setColour (kWarn); g.drawText (T8 ("ALVO: pista − alvo (acima = excesso)"), (int) p.getX() + 6, (int) p.getY() + 4, 320, 12, juce::Justification::topLeft, false); }
+        }
+
+        // overlay colectivo: choques (vermelho) e curvas das pistas (escala propria: topo = mais forte, fundo = -54 dB)
+        if (showColl)
+        {
+            const auto yRel = [&] (const pq::Collective& c, float db) { return p.getBottom() - p.getHeight() * 0.92f * c.norm01 (db); };
+            for (int b = 0; b < pq::kMixBands; ++b)
+            {
+                const float s = coll.clash[(size_t) b]; if (s < 0.15f) continue;
+                const float xa = xOf (b == 0 ? pq::mixBandFreq (0) * 0.95 : std::sqrt (pq::mixBandFreq (b - 1) * pq::mixBandFreq (b))), xb = xOf (b == pq::kMixBands - 1 ? pq::mixBandFreq (b) * 1.05 : std::sqrt (pq::mixBandFreq (b) * pq::mixBandFreq (b + 1)));
+                g.setColour (kRed.withAlpha (0.10f + 0.22f * s)); g.fillRect (xa, p.getY(), xb - xa, p.getHeight());
+            }
+            int idx = 0;
+            for (const auto& t : coll.tracks)
+            {
+                juce::Path line; for (int b = 0; b < pq::kMixBands; ++b) { const float x = xOf (pq::mixBandFreq (b)), y = yRel (coll, t.db[(size_t) b]); if (b == 0) line.startNewSubPath (x, y); else line.lineTo (x, y); }
+                const auto c = t.self ? kText : bandColour ((idx * 5) % 12); g.setColour (c.withAlpha (t.self ? 0.9f : 0.75f)); g.strokePath (line, juce::PathStrokeType (t.self ? 2.2f : 1.4f, juce::PathStrokeType::curved));
+                int pk = 0; for (int b = 1; b < pq::kMixBands; ++b) if (t.db[(size_t) b] > t.db[(size_t) pk]) pk = b;
+                g.setFont (fontOf (9.5f, true)); g.drawText (juce::String (t.name), (int) xOf (pq::mixBandFreq (pk)) - 40, (int) yRel (coll, t.db[(size_t) pk]) - 14, 80, 12, juce::Justification::centred, false); ++idx;
+            }
+            g.setFont (fontOf (9.5f)); g.setColour (coll.clashBands > 0 ? kRed : kDim);
+            g.drawText (coll.tracks.size() < 2 ? T8 ("COLETIVO: liga ANALISAR em mais pistas") : T8 ("COLETIVO") + ": " + juce::String ((int) coll.tracks.size()) + " " + T8 ("pistas") + " · " + juce::String (coll.clashBands) + " " + T8 ("bandas em choque"), (int) p.getX() + 6, (int) p.getBottom() - 16, 360, 12, juce::Justification::bottomLeft, false);
         }
 
         // curvas individuais (a partir dos coeficientes) e total

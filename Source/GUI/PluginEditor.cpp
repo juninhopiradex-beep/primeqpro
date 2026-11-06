@@ -4,7 +4,7 @@
 using namespace pqui;
 
 PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
-    : juce::AudioProcessorEditor (p), proc (p), graph (p), band (p), strip (p), fx (p), smart (p, graph), mix (p), abx (p), studio (p, graph),
+    : juce::AudioProcessorEditor (p), proc (p), graph (p), band (p), strip (p), fx (p), smart (p, graph), mix (p), abx (p), studio (p, graph), map3d (p),
       login ([this] { timerCallback(); })
 {
     if (AccessManager::get().pccConfigured()) juce::Thread::launch ([] { AccessManager::get().revalidatePcc(); });   // 1x/dia, em segundo plano
@@ -22,6 +22,9 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     logoutBtn.onClick = [this] { AccessManager::get().logout(); timerCallback(); };
     smartBtn.onClick = [this] { showSmart (smartBtn.getToggleState()); };
     mixBtn.onClick = [this] { showMix (mixBtn.getToggleState()); };
+    addChildComponent (map3d); map3d.onClose = [this] { showMap (false); };
+    addAndMakeVisible (mapBtn); mapBtn.setTooltip (pqui::T8 ("Mapa 3D da mistura: todas as pistas analisadas (frequência · nível · pista ou pan) e onde chocam")); mapBtn.onClick = [this] { showMap (mapBtn.getToggleState()); };
+    addAndMakeVisible (collBtn); collBtn.setTooltip (pqui::T8 ("Sobrepõe no gráfico as curvas das outras pistas analisadas (nível relativo) e as bandas em choque")); collBtn.onClick = [this] { graph.setCollective (collBtn.getToggleState()); };
     graph.onSelect = [this] (int b) { band.bind (b); };
     mix.onZones = [this] (const std::vector<OverlayZone>& z) { graph.setZones (z); zonesBtn.setVisible (! z.empty() || true); };
     addChildComponent (guide); guide.onClose = [] { AccessManager::get().setOnboardingSeen(); };
@@ -65,7 +68,7 @@ void PrimeqEditor::resized()
         // cabecalho adaptativo: larguras ideais reduzidas proporcionalmente quando a janela e estreita (nada fica a largura zero)
         struct It { juce::Component* c; int w; }; const int gap = 4;
         std::vector<It> left { { &presetBtn, 128 }, { &undoBtn, 46 }, { &redoBtn, 46 }, { &abBtn, 34 } };
-        std::vector<It> right { { &langBtn, 38 }, { &skinBtn, 64 }, { &logoutBtn, logoutBtn.isVisible() ? 48 : 0 }, { &helpBtn, 28 }, { &smartBtn, smartBtn.isVisible() ? 86 : 0 }, { &studioBtn, 74 }, { &mixBtn, 94 }, { &zonesBtn, 58 },
+        std::vector<It> right { { &langBtn, 38 }, { &skinBtn, 64 }, { &logoutBtn, logoutBtn.isVisible() ? 48 : 0 }, { &helpBtn, 28 }, { &smartBtn, smartBtn.isVisible() ? 86 : 0 }, { &studioBtn, 74 }, { &mixBtn, 94 }, { &mapBtn, 72 }, { &collBtn, 78 }, { &zonesBtn, 58 },
                                 { &abxBtn, 44 }, { &modeBox, 82 }, { &bypassBtn, 74 }, { &phaseBox, 108 }, { &phaseLbl, 34 } };
         int logoW = 208, sum = logoW; int n = 0; for (auto& i : left) { sum += i.w; ++n; } for (auto& i : right) if (i.w > 0) { sum += i.w; ++n; }
         sum += gap * n; const double sc = std::min (1.0, (double) head.getWidth() / (double) sum);
@@ -81,7 +84,7 @@ void PrimeqEditor::resized()
     band.setBounds (r.removeFromBottom (176)); r.removeFromBottom (6);
     if (smart.isVisible()) { smart.setBounds (r.removeFromRight (290)); r.removeFromRight (6); }
     if (studio.isVisible()) { studio.setBounds (r.removeFromRight (360)); r.removeFromRight (6); }
-    graph.setBounds (r);
+    graph.setBounds (r); map3d.setBounds (r); if (map3d.isVisible()) map3d.toFront (false);
     abx.setBounds (r.getRight() - 470, r.getY() + 10, 460, 352); abx.toFront (false);
     login.setBounds (getLocalBounds()); guide.setBounds (getLocalBounds()); if (guide.isVisible()) guide.toFront (false); else if (login.isVisible()) login.toFront (false);
     proc.uiWidth = getWidth(); proc.uiHeight = getHeight();

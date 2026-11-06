@@ -20,6 +20,9 @@
 #include "../../Source/Shared/Units.h"
 #include "../../Source/SmartOps/Abx.h"
 #include "../../Source/SmartOps/Studio.h"
+#include "../../Source/SmartOps/Profiles.h"
+#include "../../Source/SmartOps/Confidence.h"
+#include "../../Source/Plugin/Collective.h"
 #include <chrono>
 #include <cstdio>
 #include <random>
@@ -632,6 +635,21 @@ int main()
         CHECK (err < 1e-9, "HPSS: T + S reconstroi a entrada atrasada (erro max %.2e)", err);
         CHECK (cT / eT > 0.5 && cS / eS < 0.2, "HPSS: a energia do canal Transiente concentra-se nos cliques (%.0f %% de T; so %.0f %% de S) (T/S na janela %.1f dB)", 100.0 * cT / eT, 100.0 * cS / eS, clickShare);
         CHECK (tonalShare > 10.0, "HPSS: nas partes sustentadas o canal Tonal domina (S/T %.1f dB)", tonalShare);
+    }
+    // perfis do Smart Ops, niveis de confianca e logica do colectivo
+    {
+        const int want[5] = { 0, 19, 9, 6, 8 }; bool ok = true;
+        for (int op = 1; op <= 4; ++op)
+        {
+            const auto& v = pq::profiles::of (op); if ((int) v.size() != want[op]) ok = false;
+            for (size_t i = 0; i < v.size(); ++i) { if (! (v[i].fmin > 0 && v[i].fmax > v[i].fmin && v[i].fmax <= 20000)) ok = false; for (size_t j = i + 1; j < v.size(); ++j) if (std::string (v[i].name) == v[j].name) ok = false; }
+        }
+        CHECK (ok, "Perfis do Smart Ops: contagens (19/9/6/8), gamas validas e nomes unicos");
+        pq::Confidence c; c.any = true; c.score = 0.7; const bool h = c.level() == 2; c.score = 0.5; const bool m = c.level() == 1; c.score = 0.2; CHECK (h && m && c.level() == 0, "Confianca: limiares alta >= 0,65, media >= 0,40, baixa");
+        pq::Collective col; for (int t = 0; t < 3; ++t) { pq::CollTrack ct; ct.name = "t"; for (int b = 0; b < pq::kMixBands; ++b) ct.db[(size_t) b] = -80.f; ct.db[10] = -10.f - (t == 2 ? 25.f : (float) t); ct.peakDb = ct.db[10]; col.tracks.push_back (ct); }
+        pq::Collective::analyse (col);
+        CHECK (col.clash[10] > 0.5f && col.clash[3] < 0.01f && col.clashBands == 1, "Colectivo: choque so onde duas pistas fortes coincidem (sev %.2f, %d banda)", col.clash[10], col.clashBands);
+        CHECK (std::fabs (col.norm01 (col.refDb) - 1.f) < 1e-6f && col.norm01 (-120.f) == 0.f, "Colectivo: normalizacao 0..1 relativa ao mais forte");
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;

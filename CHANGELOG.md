@@ -1,4 +1,11 @@
 # Changelog
+## 1.8.0 — SPECTRAL
+- **T/S espectral (HPSS)**: novo "T/S MOTOR" = *Envelope* (como na 1.7, sem latência) ou *Spectral* (STFT 2048, hop 512, separação por medianas tempo/frequência, máscara suave). Separa transiente e tonal em frequência, por isso é mais robusto com vibrato forte e material denso que o detetor de envelope. Só em Zero Latency; **declara +3584 amostras de latência** (compensada pela DAW). Transiente + Tonal = entrada atrasada exatamente (nulo medido a -300 dB; banda neutra = entrada atrasada).
+- **Confiança medida no Smart Ops**: já não é só o tempo de material. Mede a repetibilidade do achado (material dividido em metades alternadas de 1 s, correlação entre metades), a estabilidade e a proeminência. O modo Auto só aplica com confiança média/alta *medida*. Determinístico, sem IA. Mede se o achado é repetível e claro, **não** se o corte soa melhor.
+- **Mais presets no Smart Ops**: 42 perfis (De-resonate 19, De-ess 9, Match 6, Unmask 8), cada um com valores iniciais e gama de frequências própria (voz masculina/feminina, rap, kick, bass, guitarra, overheads, piano, mix bus, sibilância...).
+- **Mapa 3D da mistura** (botão MAPA 3D): todas as pistas analisadas em perspetiva (frequência · nível relativo · pista ou pan), rodar com o rato, zoom, isolar uma pista, planos vermelhos onde duas ou mais pistas fortes competem.
+- **Overlay coletivo** (botão COLETIVO): curvas das outras pistas (nível relativo) e bandas em choque desenhadas no gráfico principal.
+- Limites assumidos: Mapa 3D e coletivo só veem instâncias do PRIMEQ PRO no mesmo processo da DAW e com ANALISAR ligado (DAWs que isolam plugins em processos separados não mostram as outras pistas); o "choque" é uma heurística de níveis próximos, não uma medida de mascaramento perceptual; o T/S espectral não foi ouvido em DAW real nem validado com auval.
 ## 1.7.0 — PRIME
 - **Skins**: botão de cor no topo alterna entre **PRIME** (grafite + teal), **OURO** (grafite quente + dourado) e **ÍNDIGO** (azul/laranja da paleta Okabe-Ito, seguro para daltonismo). Aplica-se logo, fica guardado e segue todas as instâncias abertas.
 - Polimento visual: cabeçalho com gradiente e linha de acento, botões e potenciómetros com relevo e brilho, curva total com halo, dicas na cor da skin.
