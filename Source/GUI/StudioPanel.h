@@ -38,7 +38,7 @@ public:
         for (auto& b : pickB) { addChildComponent (b); }
         // --- tradutor
         for (int i = 0; i < 5; ++i) { devB[i].setButtonText (juce::String (juce::CharPointer_UTF8 (pq::studio::devices()[(size_t) i].pt))); devB[i].setClickingTogglesState (false); devB[i].onClick = [this, i] { dev = i; if (listenB.getToggleState()) proc.setTranslator (dev + 1); recompute(); }; addAndMakeVisible (devB[i]); }
-        listenB.setButtonText ("OUVIR ASSIM"); listenB.setTooltip ("Filtra a sa\xC3\xADda do plugin como esse equipamento (s\xC3\xB3 monitoriza\xC3\xA7\xC3\xA3o; desliga ao fechar o plugin)."); listenB.onClick = [this] { proc.setTranslator (listenB.getToggleState() ? dev + 1 : 0); recompute(); }; addAndMakeVisible (listenB);
+        listenB.setButtonText ("OUVIR ASSIM"); listenB.setTooltip ("Filtra a sa\xC3\xAD""da do plugin como esse equipamento (s\xC3\xB3 monitoriza\xC3\xA7\xC3\xA3o; desliga ao fechar o plugin)."); listenB.onClick = [this] { proc.setTranslator (listenB.getToggleState() ? dev + 1 : 0); recompute(); }; addAndMakeVisible (listenB);
         // --- palavras
         wordsEd.setMultiLine (false); wordsEd.setTextToShowWhenEmpty ("ex.: menos lama, mais presen\xC3\xA7""a e brilho", kDim); wordsEd.setColour (juce::TextEditor::backgroundColourId, kLine); wordsEd.setColour (juce::TextEditor::textColourId, kText); wordsEd.setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
         wordsEd.setFont (fontOf (13.f)); wordsEd.onReturnKey = [this] { interpretWords(); }; addAndMakeVisible (wordsEd);
@@ -218,7 +218,7 @@ private:
                 char b[200]; std::snprintf (b, sizeof b, en ? "%s: %.0f%% of the measured energy stays audible.\n\n" : "%s: %.0f%% da energia medida continua aud\xC3\xADvel.\n\n", juce::String (juce::CharPointer_UTF8 (en ? devices()[(size_t) dev].en : devices()[(size_t) dev].pt)).toRawUTF8(), trn.retainedPct); s = b;
                 for (const auto& l : (en ? trn.linesEn : trn.linesPt)) s += "\xE2\x80\xA2 " + l + "\n";
                 s += en ? "\nGeneric response of an equipment CATEGORY with an estimated ambient noise floor \xE2\x80\x94 not a measurement of any specific model. Use OUVIR ASSIM to hear it."
-                        : "\nResposta gen\xC3\xA9rica de uma CATEGORIA de equipamento, com ru\xC3\xADdo ambiente estimado \xE2\x80\x94 n\xC3\xA3o \xC3\xA9 a medi\xC3\xA7\xC3\xA3o de um modelo concreto. Use OUVIR ASSIM para ouvir.";
+                        : "\nResposta gen\xC3\xA9rica de uma CATEGORIA de equipamento, com ru\xC3\xAD""do ambiente estimado \xE2\x80\x94 n\xC3\xA3o \xC3\xA9 a medi\xC3\xA7\xC3\xA3o de um modelo concreto. Use OUVIR ASSIM para ouvir.";
                 int b0 = 0; while (b0 < pq::kMixBands) { if (trn.status[(size_t) b0] != 2) { ++b0; continue; } int e2 = b0; while (e2 + 1 < pq::kMixBands && trn.status[(size_t) e2 + 1] == 2) ++e2; lost.push_back (std::make_pair (pq::mixBandFreq (b0), pq::mixBandFreq (e2))); b0 = e2 + 1; }
             }
         }

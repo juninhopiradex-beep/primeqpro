@@ -505,7 +505,7 @@ int main()
             { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_alvo.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
             S.setTab (StudioPanel::TTrans); CHECK (S.translation().ok, "Painel STUDIO: aba TRADUTOR calcula");
             { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_tradutor.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
-            S.setTab (StudioPanel::TWords); S.setWords ("menos lama e mais presen\xC3\xA7""a"); CHECK (S.pendingBands() >= 2, "Painel STUDIO: PALAVRAS interpreta (%d bandas)", S.pendingBands());
+            S.setTab (StudioPanel::TWords); S.setWords (juce::String (juce::CharPointer_UTF8 ("menos lama e mais presen\xC3\xA7""a"))); CHECK (S.pendingBands() >= 2, "Painel STUDIO: PALAVRAS interpreta (%d bandas)", S.pendingBands());
             { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_palavras.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
             S.setTab (StudioPanel::TVault); { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_cofre.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
             S.setTab (StudioPanel::TTeach); { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_ensino.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }

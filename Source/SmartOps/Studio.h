@@ -353,7 +353,7 @@ inline WordsPlan planWords (const std::string& text, double amount01, const Curv
         (void) hit;
     }
     char b1[300], b2[300];
-    std::snprintf (b1, sizeof b1, "Interpretei %d pedido(s) em %d banda(s) NORMAIS e edit\xC3\xA1veis (ganhos at\xC3\xA9 \xC2\xB1""4,5 dB). Isto \xC3\xA9 um dicion\xC3\xA1rio de palavras-chave, n\xC3\xA3o compreens\xC3\xA3o de linguagem: confira a previs\xC3\xA3o e ou\xC3\xA7a.", (int) W.recognised.size(), (int) W.props.size());
+    std::snprintf (b1, sizeof b1, "Interpretei %d pedido(s) em %d banda(s) NORMAIS e edit\xC3\xA1veis (ganhos at\xC3\xA9 \xC2\xB1""4,5 dB). Isto \xC3\xA9 um dicion\xC3\xA1rio de palavras-chave, n\xC3\xA3o compreens\xC3\xA3o de linguagem: confira a previs\xC3\xA3o e ou\xC3\xA7""a.", (int) W.recognised.size(), (int) W.props.size());
     std::snprintf (b2, sizeof b2, "Interpreted %d request(s) into %d NORMAL, editable band(s) (gains up to \xC2\xB1""4.5 dB). This is a keyword dictionary, not language understanding: check the prediction and listen.", (int) W.recognised.size(), (int) W.props.size());
     W.explPt = b1; W.explEn = b2;
     for (const auto& p : W.props) for (int b = 0; b < kMixBands; ++b) { const double d = filterDbAt (p, mixBandFreq (b)); if (p.dynamic) W.dynMax[(size_t) b] += (p.gainDb < 0 ? -1.0 : 1.0) * std::fabs (d); else W.staticDelta[(size_t) b] += d; }
@@ -430,7 +430,7 @@ inline std::string sheetHtml (const SheetData& S)
     // alvo
     if (S.dev.ok)
     {
-        o << "<h2>" << t2 ("Equil\xC3\xADbrio tonal vs alvo", "Tonal balance vs target") << "</h2><div class=c><div>" << t2 ("Alvo: " + S.targetNamePt, "Target: " + S.targetNameEn) << " \xC2\xB7 RMS " << (int) std::lround (S.dev.rms * 10) / 10.0 << " dB</div><ul>";
+        o << "<h2>" << t2 ("Equil\xC3\xAD""brio tonal vs alvo", "Tonal balance vs target") << "</h2><div class=c><div>" << t2 ("Alvo: " + S.targetNamePt, "Target: " + S.targetNameEn) << " \xC2\xB7 RMS " << (int) std::lround (S.dev.rms * 10) / 10.0 << " dB</div><ul>";
         for (size_t i = 0; i < S.dev.linesPt.size(); ++i) o << "<li>" << t2 (S.dev.linesPt[i], S.dev.linesEn[i]) << "</li>";
         o << "</ul><div class=d>" << t2 ("O alvo \xC3\xA9 uma curva heur\xC3\xADstica de partida, n\xC3\xA3o uma regra.", "The target is a heuristic starting curve, not a rule.") << "</div></div>";
     }

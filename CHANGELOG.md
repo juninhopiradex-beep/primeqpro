@@ -1,4 +1,8 @@
 # Changelog
+## 1.6.0 — STUDIO
+- Novo painel **STUDIO** (botão no topo): **ALVO** (curvas-alvo por género: Kizomba, Semba, Kuduro, Amapiano, Afrobeat, Hip-Hop, Trap, Pop, Rock, Eletrónica, Voz; ajustáveis; "gravar a minha"; desvio desenhado no gráfico; propor/aplicar bandas; sugerir o preset de fábrica mais próximo), **TRADUTOR** (telemóvel, colunas pequenas, auriculares, carro, mono: o que desaparece, e "ouvir assim"), **PALAVRAS** (ex.: "menos lama, mais presença", PT/EN, com pré-visualização), **COFRE** (decisões com motivo, restauro por etapas, ficha bilingue em HTML, enviar a assinatura para outras pistas) e **ENSINO** (explica ao vivo o que cada banda faz).
+- **ABX por banda**: testa às cegas só uma banda (A = sem a banda, B = com a banda) com o nível igualado.
+- Limites assumidos: os alvos são curvas heurísticas (não medidas em faixas comerciais); o Tradutor usa respostas genéricas por categoria de equipamento; as palavras são um dicionário de termos, não compreensão de linguagem; só há medição de 80 Hz a 12 kHz.
 ## 1.5.0
 - Novo: idioma Português / English. Botão PT/EN no topo; troca imediata e guardada. Sem escolha, segue o idioma do sistema.
 - Traduzidos: menus, botões, dicas, guia inicial, teste ABX, Assistente (rótulos). As frases de diagnóstico geradas pelo Assistente e o relatório exportado continuam em português nesta versão.
