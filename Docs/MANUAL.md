@@ -22,7 +22,7 @@ Botão **ASSISTENTE**. Marque **ANALISAR** nas pistas (uma instância por pista,
 - **Doutor:** escolha um sintoma; vê evidências medidas e hipóteses etiquetadas ("a investigar", "compatível com os dados", "não confirmado").
 - **Intenção:** Clarity / Punch / Warmth / Space / Smooth, com intensidade. Ganhos ≤ 4 dB, tudo editável.
 - **Cenários:** compara A (EQ), B (sidechain), C (misto).
-**ZONAS** (topo) liga/desliga no gráfico principal as zonas de masking (vermelho) e espaço (violeta) detectadas.
+**CONFLITOS** (antes ZONAS; barra lateral) liga/desliga no gráfico principal as zonas de masking (vermelho) e espaço (violeta) detectadas.
 Use os **grupos G1–G4** para separar projectos no mesmo processo do DAW.
 O Assistente é determinístico (medições e regras), não é IA nem substitui o ouvido.
 
@@ -71,3 +71,9 @@ Limits: targets are heuristic starting curves; device responses are generic per 
 ## Interface 1.10 / Interface 1.10
 **PT** — Barra lateral à esquerda com as ferramentas. Em baixo, a banda seleccionada numa linha (Freq/Gain/Q, tipo, colocação, DYN, Both/Transient/Tonal, Listen/Copiar/Colar/Apagar) e o cartão SAÍDA (Output, Auto Gain, Delta, Sidechain). O medidor de saída L/R está à direita do espectro; clica no CLIP para o limpar. **EXPERT** (topo) abre a gaveta com DINÂMICA, DE-HARSH, CARÁCTER · T/S e ANÁLISE · MEDIÇÃO; fica guardado na sessão. **PT | EN** mudam o idioma.
 **EN** — Tool rail on the left. Below the graph: the selected band in one row (Freq/Gain/Q, type, placement, DYN, Both/Transient/Tonal, Listen/Copy/Paste/Delete) and the OUTPUT card (Output, Auto Gain, Delta, Sidechain). The L/R output meter sits to the right of the spectrum; click CLIP to clear it. **EXPERT** (top) opens the drawer with DYNAMIC, DE-HARSH, CHARACTER · T/S and ANALYSIS · METERING; it is saved with the session. **PT | EN** switch the language.
+
+
+## Interface 1.11
+**PT** — ⚙ (topo) abre Opções: idioma, cor e terminar sessão. **OUTRAS PISTAS** (antes COLETIVO) mostra no gráfico as curvas das outras instâncias do PrimEQ no projeto com ANALISAR ligado. **CONFLITOS** (antes ZONAS) pinta onde duas pistas disputam frequências (vermelho) e espaço (violeta). Smart Ops: grelha de 20–24 perfis por operação. OUVIR segue a banda selecionada.
+
+**EN** — ⚙ (top) opens Options: language, colour, log out. **OTHER TRACKS** (was COLLECTIVE) overlays the curves of other PrimEQ instances in the project with ANALYSE on. **CONFLICTS** (was ZONES) paints where two tracks fight for frequencies (red) and space (violet). Smart Ops: grid of 20–24 profiles per operation. LISTEN follows the selected band.

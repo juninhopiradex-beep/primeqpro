@@ -628,6 +628,18 @@ int main()
         pe->setSize (1100, 740); pe->resized(); shot ("ui_final_min.png"); pe->setSize (1240, 860);
         pe->setExpert (false);
     }
+    // 29) 1.11: Smart Ops >= 20 perfis por operacao, OUVIR segue a selecao, menu de opcoes
+    {
+        for (int op = 1; op <= 4; ++op) CHECK (pq::profiles::of (op).size() >= 20, "Smart Ops op %d tem >= 20 perfis (%d)", op, (int) pq::profiles::of (op).size());
+        auto p0 = make (48000.0, 512); std::unique_ptr<juce::AudioProcessorEditor> ed (p0->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860);
+        pe->getGraph().select (3); CHECK (p0->listenBand.load() == -1, "OUVIR desligado: selecionar nao liga o OUVIR");
+        p0->listenBand.store (5); pe->getGraph().select (2); CHECK (p0->listenBand.load() == 2, "OUVIR segue a banda selecionada (2)");
+        pe->getGraph().select (7); CHECK (p0->listenBand.load() == 7, "OUVIR segue a banda selecionada (7)");
+        p0->listenBand.store (-1);
+        pe->showSmart (true); pe->resized();
+        { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("ui_smart_chips.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+        pe->showSmart (false);
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }

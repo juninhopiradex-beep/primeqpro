@@ -152,7 +152,7 @@ public:
                 g.setFont (fontOf (9.5f, true)); g.drawText (juce::String (t.name), (int) xOf (pq::mixBandFreq (pk)) - 40, (int) yRel (coll, t.db[(size_t) pk]) - 14, 80, 12, juce::Justification::centred, false); ++idx;
             }
             g.setFont (fontOf (9.5f)); g.setColour (coll.clashBands > 0 ? kRed : kDim);
-            g.drawText (coll.tracks.size() < 2 ? T8 ("COLETIVO: liga ANALISAR em mais pistas") : T8 ("COLETIVO") + ": " + juce::String ((int) coll.tracks.size()) + " " + T8 ("pistas") + " · " + juce::String (coll.clashBands) + " " + T8 ("bandas em choque"), (int) p.getX() + 6, (int) p.getBottom() - 16, 360, 12, juce::Justification::bottomLeft, false);
+            g.drawText (coll.tracks.size() < 2 ? T8 ("OUTRAS PISTAS: liga ANALISAR em mais pistas") : T8 ("OUTRAS PISTAS") + ": " + juce::String ((int) coll.tracks.size()) + " " + T8 ("pistas") + " · " + juce::String (coll.clashBands) + " " + T8 ("bandas em choque"), (int) p.getX() + 6, (int) p.getBottom() - 16, 360, 12, juce::Justification::bottomLeft, false);
         }
 
         // curvas individuais (a partir dos coeficientes) e total
@@ -289,7 +289,7 @@ public:
         return false;
     }
 
-    void select (int b) { selected = b; if (onSelect) onSelect (b); repaint(); }
+    void select (int b) { selected = b; if (b >= 0 && proc.listenBand.load() >= 0) proc.listenBand.store (b); if (onSelect) onSelect (b); repaint(); }
     static inline pq::BandParams clipboard; static inline bool hasClip = false;
 
 private:

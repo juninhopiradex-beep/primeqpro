@@ -433,7 +433,7 @@ public:
         using namespace pqui;
         opBox.addItem ("Deresonate", Deres); opBox.addItem ("De-Ess", DeEssOp); opBox.addItem ("Reference Match", MatchOp); opBox.addItem ("Unmask (sidechain)", UnmaskOp); opBox.addItem ("Morph A \xE2\x86\x94 B", MorphOp);
         opBox.setSelectedId (Deres, juce::dontSendNotification); opBox.onChange = [this] { configureOp(); }; addAndMakeVisible (opBox);
-        profileBox.setTooltip (T8 ("Perfil de partida para esta operação (valores editáveis)")); profileBox.onChange = [this] { applyProfile(); }; addAndMakeVisible (profileBox);
+        profileBox.setTooltip (T8 ("Perfil de partida para esta operação (valores editáveis)")); profileBox.onChange = [this] { applyProfile(); syncChips(); }; addChildComponent (profileBox); chipView.setViewedComponent (&chipHolder, false); chipView.setScrollBarsShown (true, false); addAndMakeVisible (chipView);
         modeBox.addItem ("Analisar", 1); modeBox.addItem ("Assistir", 2); modeBox.addItem ("Auto (opt-in)", 3); modeBox.setSelectedId (2, juce::dontSendNotification); addAndMakeVisible (modeBox);
         modeBox.setTooltip (T8 ("Analisar: só mostra evidências e sugestões, nada é aplicado · Assistir: pré-visualiza e você aplica · Auto: aplica sozinho ao parar o Learn, só com confiança média/alta (Revert desfaz)"));
         for (auto* b : { &learnB, &stopB, &applyB, &revertB, &loadRefB, &capA, &capB, &clearMorphB }) addAndMakeVisible (b);
@@ -476,8 +476,8 @@ public:
         auto r = getLocalBounds().reduced (12, 10); r.removeFromTop (22);
         opBox.setBounds (r.removeFromTop (28)); r.removeFromTop (6);
         const bool morph = op() == MorphOp, match = op() == MatchOp;
-        modeBox.setVisible (! morph); profileBox.setVisible (! morph);
-        if (! morph) { profileBox.setBounds (r.removeFromTop (26)); r.removeFromTop (4); modeBox.setBounds (r.removeFromTop (26)); r.removeFromTop (6); } else r.removeFromTop (2);
+        modeBox.setVisible (! morph); chipView.setVisible (! morph);
+        if (! morph) { layoutChips (r.removeFromTop (118)); r.removeFromTop (4); modeBox.setBounds (r.removeFromTop (26)); r.removeFromTop (6); } else r.removeFromTop (2);
         for (auto* c : std::initializer_list<juce::Component*> { &learnB, &stopB, &applyB, &revertB, &sens, &maxCut, &maxBands, &lSens, &lCut, &lBands }) c->setVisible (! morph);
         for (auto* c : std::initializer_list<juce::Component*> { &capA, &capB, &clearMorphB, &morphOnB, &morphS, &lMorph }) c->setVisible (morph);
         loadRefB.setVisible (match);
@@ -522,7 +522,35 @@ private:
         profileBox.clear (juce::dontSendNotification); profLo = 0; profHi = 1e9;
         profileBox.addItem (T8 ("Perfil: personalizado"), 1); int id = 2;
         for (const auto& pr : pq::profiles::of (op())) profileBox.addItem (T8 (pr.name), id++);
-        profileBox.setSelectedId (1, juce::dontSendNotification);
+        profileBox.setSelectedId (1, juce::dontSendNotification); buildChips();
+    }
+    void buildChips()
+    {
+        chips.clear(); chipHolder.removeAllChildren(); int k = 0;
+        for (const auto& pr : pq::profiles::of (op()))
+        {
+            auto* b = chips.add (new juce::TextButton (T8 (pr.name))); b->setClickingTogglesState (false); b->setTooltip (T8 (pr.note));
+            const int id = k + 2; b->onClick = [this, id] { profileBox.setSelectedId (profileBox.getSelectedId() == id ? 1 : id, juce::sendNotificationSync); };
+            chipHolder.addAndMakeVisible (b); ++k;
+        }
+        layoutChips (chipView.getBounds()); syncChips();
+    }
+    void layoutChips (juce::Rectangle<int> area)
+    {
+        if (! area.isEmpty()) chipView.setBounds (area);
+        const int w = std::max (60, chipView.getWidth() - chipView.getScrollBarThickness()), cw = w / 2, ch = 26;
+        for (int i = 0; i < chips.size(); ++i) chips[i]->setBounds ((i % 2) * cw, (i / 2) * ch, cw - 3, ch - 3);
+        chipHolder.setSize (w, ((chips.size() + 1) / 2) * ch);
+    }
+    void syncChips()
+    {
+        for (int i = 0; i < chips.size(); ++i)
+        {
+            const bool on = profileBox.getSelectedId() == i + 2;
+            chips[i]->setColour (juce::TextButton::buttonColourId, on ? pqui::kTeal : pqui::kPanel.brighter (0.15f));
+            chips[i]->setColour (juce::TextButton::textColourOffId, on ? juce::Colours::black : pqui::kText);
+            chips[i]->repaint();
+        }
     }
     void applyProfile()
     {
@@ -637,7 +665,7 @@ private:
     }
     void setStatus (const juce::String& s) { status.setText (s, juce::dontSendNotification); }
     PrimeqProcessor& proc; EqGraph& graph; bool learned = false;
-    juce::ComboBox opBox, modeBox, profileBox; double profLo = 0, profHi = 1e9; pq::Confidence lastConf; juce::TextButton learnB { "Learn" }, stopB { "Stop" }, applyB { "Apply" }, revertB { "Revert" }, loadRefB { "Carregar refer\xC3\xAAncia..." }, capA { "Guardar A" }, capB { "Guardar B" }, clearMorphB { "Limpar A/B" };
+    juce::ComboBox opBox, modeBox, profileBox; juce::Viewport chipView; juce::Component chipHolder; juce::OwnedArray<juce::TextButton> chips; double profLo = 0, profHi = 1e9; pq::Confidence lastConf; juce::TextButton learnB { "Learn" }, stopB { "Stop" }, applyB { "Apply" }, revertB { "Revert" }, loadRefB { "Carregar refer\xC3\xAAncia..." }, capA { "Guardar A" }, capB { "Guardar B" }, clearMorphB { "Limpar A/B" };
     juce::ToggleButton morphOnB; juce::Slider sens, maxCut, maxBands, morphS; juce::Label lSens, lCut, lBands, status, note, lMorph;
     std::unique_ptr<ButtonAtt> aMorphOn; std::unique_ptr<SliderAtt> aMorph; std::unique_ptr<juce::FileChooser> chooser;
 };
@@ -784,7 +812,7 @@ private:
         mix.relabel(); login.refreshLanguage(); smart.refreshLanguage(); timerCallback(); repaint();
     }
     void setLanguage (int l) { pqui::i18n::lang() = l; AccessManager::get().setLanguage (l); applyLanguage(); }
-    void presetMenu();
+    void presetMenu(); void optionsMenu(); void stepPreset (int d); int presetIdx = -1;
     static std::vector<PrimeqEditor*>& openEditors() { static std::vector<PrimeqEditor*> v; return v; }
     void refreshSkin (int i)
     {
@@ -798,8 +826,8 @@ private:
     PrimeqProcessor& proc; pqui::Lnf lnf;
     EqGraph graph; BandPanel band, bandDyn; GlobalStrip strip, stripAn; FxPanel fx, fx2; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; pqui::MixMap3D map3d; pqui::VisualMixer vmix; LoginOverlay login; OnboardingOverlay guide;
     juce::TextButton langPt { "PT" }, langEn { "EN" }, skinBtn { "PRIME" }; juce::ToggleButton expertBtn { "EXPERT" }; LevelMeter outMeter;
-    juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
-    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "ZONAS" }, mapBtn { "MAPA 3D" }, vmixBtn { "MIXER" }, collBtn { "COLETIVO" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox phaseBox; juce::Label phaseLbl;
+    juce::TextButton cogBtn { juce::String (juce::CharPointer_UTF8 ("\xE2\x9A\x99")) }, prevPreBtn { "<" }, nextPreBtn { ">" }, presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
+    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "CONFLITOS" }, mapBtn { "MAPA 3D" }, vmixBtn { "MIXER" }, collBtn { "OUTRAS PISTAS" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;
     juce::String presetName { "Init (Flat)" }; bool wasUnlocked = true; int lastSel = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrimeqEditor)

@@ -1,4 +1,11 @@
 # Changelog
+## 1.11.0 — SMART OPS, ⚙ OPÇÕES E PRESETS
+- **Smart Ops**: 24 perfis no Deresonate (novos: Sopros, Podcast, Sala, Voz ao vivo, Sample/loop) e 20 em De-Ess, Match e Unmask; os perfis aparecem como botões numa grelha com scroll (1 clique; clicar de novo volta a "personalizado").
+- **OUVIR segue a seleção**: com OUVIR ligado, clicar noutro ponto/banda passa a ouvir essa banda.
+- **Roda dentada ⚙** no cabeçalho com Idioma (Português/English), Cor (PRIME/OURO/ÍNDIGO) e Terminar sessão; os botões PT|EN e cor saíram do cabeçalho.
+- **Presets**: botão de preset largo (já não corta "Init (Flat)"), setas < > para trocar de predefinição, Undo/Redo e A/B ao lado.
+- **Nomes mais claros**: COLETIVO → **OUTRAS PISTAS** (curvas das outras instâncias do projeto); ZONAS → **CONFLITOS** (masking em vermelho, espaço em violeta); tooltips explicam o que fazem.
+- Não testado num DAW real.
 ## 1.10.0 — NOVA INTERFACE
 - **Nome**: o produto passa a chamar-se **PrimEQ Pro by Piradex** (cabeçalho, bundle VST3/AU, instaladores e documentação). O código de plugin, o BUNDLE_ID, as sessões guardadas e a licença não mudam: as sessões antigas abrem normalmente.
 - **Interface reorganizada**: barra lateral esquerda com as ferramentas (Smart Ops, Studio, Assistente, Mixer, Mapa 3D, Coletivo, Zonas, ABX); em baixo, uma só linha com a banda seleccionada (Freq/Gain/Q grandes, tipo, DYN, Listen/Copiar/Colar/Apagar) e o cartão SAÍDA (output, Auto Gain, Delta, Sidechain).

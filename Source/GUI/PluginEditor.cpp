@@ -26,18 +26,21 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     addAndMakeVisible (mapBtn); mapBtn.setTooltip (pqui::T8 ("Mapa 3D da mistura: todas as pistas analisadas (frequência · nível · pista ou pan) e onde chocam")); mapBtn.onClick = [this] { showMap (mapBtn.getToggleState()); };
     addChildComponent (vmix); vmix.onClose = [this] { showMixer (false); };
     addAndMakeVisible (vmixBtn); vmixBtn.setTooltip (pqui::T8 ("Visual Mixer: arrasta cada pista no plano pan (X) e ganho (Y); as pontas alteram a largura. Snapshots A/B/C e Balance Assistant")); vmixBtn.onClick = [this] { showMixer (vmixBtn.getToggleState()); };
-    addAndMakeVisible (collBtn); collBtn.setTooltip (pqui::T8 ("Sobrepõe no gráfico as curvas das outras pistas analisadas (nível relativo) e as bandas em choque")); collBtn.onClick = [this] { graph.setCollective (collBtn.getToggleState()); };
+    addAndMakeVisible (collBtn); collBtn.setTooltip (pqui::T8 ("OUTRAS PISTAS: mostra no gráfico as curvas das outras pistas do projeto (outras instâncias do PrimEQ com ANALISAR ligado) e as bandas que chocam com as tuas.")); collBtn.onClick = [this] { graph.setCollective (collBtn.getToggleState()); };
     graph.onSelect = [this] (int b) { band.bind (b); bandDyn.bind (b); };
     mix.onZones = [this] (const std::vector<OverlayZone>& z) { graph.setZones (z); zonesBtn.setVisible (! z.empty() || true); };
     addChildComponent (guide); guide.onClose = [] { AccessManager::get().setOnboardingSeen(); };
-    addAndMakeVisible (skinBtn); skinBtn.setButtonText (pqui::skinName (shownSkin)); skinBtn.setTooltip (juce::String (juce::CharPointer_UTF8 ("Cor / skin: Prime, Ouro, \xC3\x8D""ndigo (seguro para daltonismo)")));
+    addChildComponent (skinBtn); skinBtn.setButtonText (pqui::skinName (shownSkin)); skinBtn.setTooltip (juce::String (juce::CharPointer_UTF8 ("Cor / skin: Prime, Ouro, \xC3\x8D""ndigo (seguro para daltonismo)")));
     skinBtn.onClick = [this] { changeSkin ((pqui::skinIndex() + 1) % 3); };
-    for (auto* b : { &langPt, &langEn }) { addAndMakeVisible (b); b->setClickingTogglesState (false); }
+    for (auto* b : { &langPt, &langEn }) { addChildComponent (b); b->setClickingTogglesState (false); }
+    addAndMakeVisible (cogBtn); cogBtn.setTooltip (pqui::T8 ("Opções")); cogBtn.onClick = [this] { optionsMenu(); };
+    addAndMakeVisible (prevPreBtn); addAndMakeVisible (nextPreBtn); prevPreBtn.setTooltip (pqui::T8 ("Predefinição anterior")); nextPreBtn.setTooltip (pqui::T8 ("Predefinição seguinte"));
+    prevPreBtn.onClick = [this] { stepPreset (-1); }; nextPreBtn.onClick = [this] { stepPreset (1); };
     langPt.onClick = [this] { setLanguage (0); }; langEn.onClick = [this] { setLanguage (1); };
     addAndMakeVisible (helpBtn); helpBtn.setTooltip (pqui::T8 ("Guia rápido")); helpBtn.onClick = [this] { guide.open(); resized(); };
     addChildComponent (studio); addAndMakeVisible (studioBtn); studioBtn.setTooltip (juce::String (juce::CharPointer_UTF8 ("Alvo por g\xC3\xA9nero, Tradutor, Palavras, Cofre de decis\xC3\xB5""es e Ensino"))); studioBtn.onClick = [this] { showStudio (studioBtn.getToggleState()); };
     addChildComponent (abx); addAndMakeVisible (abxBtn); abxBtn.setTooltip ("Teste ABX cego: original vs processado, loudness igualado"); abxBtn.onClick = [this] { showAbx (abxBtn.getToggleState()); };
-    addAndMakeVisible (zonesBtn); zonesBtn.setToggleState (true, juce::dontSendNotification); zonesBtn.setTooltip (pqui::T8 ("Mostra no gráfico as zonas de masking e espaço detectadas pelo Assistente")); zonesBtn.onClick = [this] { graph.showZones = zonesBtn.getToggleState(); graph.repaint(); };
+    addAndMakeVisible (zonesBtn); zonesBtn.setToggleState (true, juce::dontSendNotification); zonesBtn.setTooltip (pqui::T8 ("CONFLITOS: pinta no gráfico onde duas pistas disputam as mesmas frequências (vermelho) e o espaço estéreo (violeta). Precisa da análise do Assistente.")); zonesBtn.onClick = [this] { graph.showZones = zonesBtn.getToggleState(); graph.repaint(); };
     addAndMakeVisible (expertBtn); expertBtn.setClickingTogglesState (true); expertBtn.setToggleState (proc.uiMode >= 2, juce::dontSendNotification); expertBtn.setTooltip (pqui::T8 ("EXPERT: abre a gaveta com Dinâmica, De-harsh, Carácter, Oversampling, Lookahead, T/S e Análise; liga também os cenários e o relatório do Assistente")); expertBtn.onClick = [this] { proc.uiMode = expertBtn.getToggleState() ? 2 : 1; applyMode(); };
     addChildComponent (login); wasUnlocked = AccessManager::get().isUnlocked(); login.setVisible (! wasUnlocked); lastSel = 0; logoutBtn.setVisible (wasUnlocked && ! AccessManager::inTrial());
     addAndMakeVisible (outMeter); outMeter.setStyle (false, true);
@@ -73,8 +76,8 @@ void PrimeqEditor::resized()
     {
         // cabecalho adaptativo: larguras ideais reduzidas proporcionalmente quando a janela e estreita (nada fica a largura zero)
         struct It { juce::Component* c; int w; }; const int gap = 4;
-        std::vector<It> left { { &presetBtn, 128 }, { &undoBtn, 46 }, { &redoBtn, 46 }, { &abBtn, 34 } };
-        std::vector<It> right { { &langEn, 36 }, { &langPt, 36 }, { &skinBtn, 64 }, { &logoutBtn, logoutBtn.isVisible() ? 48 : 0 }, { &helpBtn, 28 }, { &expertBtn, 84 }, { &bypassBtn, 74 }, { &phaseBox, 108 }, { &phaseLbl, 44 } };
+        std::vector<It> left { { &presetBtn, 300 }, { &prevPreBtn, 26 }, { &nextPreBtn, 26 }, { &undoBtn, 56 }, { &redoBtn, 56 }, { &abBtn, 34 } };
+        std::vector<It> right { { &cogBtn, 32 }, { &logoutBtn, logoutBtn.isVisible() ? 48 : 0 }, { &helpBtn, 28 }, { &expertBtn, 84 }, { &bypassBtn, 74 }, { &phaseBox, 108 }, { &phaseLbl, 44 } };
         int logoW = 208, sum = logoW; int n = 0; for (auto& i : left) { sum += i.w; ++n; } for (auto& i : right) if (i.w > 0) { sum += i.w; ++n; }
         sum += gap * n; const double sc = std::min (1.0, (double) head.getWidth() / (double) sum);
         head.removeFromLeft ((int) (logoW * sc));
@@ -123,6 +126,25 @@ void PrimeqEditor::timerCallback()
     undoBtn.setEnabled (proc.undo.canUndo()); redoBtn.setEnabled (proc.undo.canRedo());
 }
 
+void PrimeqEditor::stepPreset (int d)
+{
+    const int n = (int) PrimeqProcessor::factoryPresets().size(); if (n <= 0) return;
+    presetIdx = ((presetIdx < 0 ? (d > 0 ? -1 : 0) : presetIdx) + d + n) % n;
+    proc.loadFactoryPreset (presetIdx); presetName = juce::String (juce::CharPointer_UTF8 (PrimeqProcessor::factoryPresets()[(size_t) presetIdx].name)); presetBtn.setButtonText (presetName);
+}
+
+void PrimeqEditor::optionsMenu()
+{
+    using pqui::T8; juce::PopupMenu m; const bool en = pqui::i18n::lang().load() != 0; const int sk = pqui::skinIndex();
+    m.addSectionHeader (T8 ("Idioma"));
+    m.addItem (11, "Português", true, ! en); m.addItem (12, "English", true, en);
+    m.addSectionHeader (T8 ("Cor (skin)"));
+    for (int i = 0; i < 3; ++i) m.addItem (21 + i, pqui::skinName (i), true, sk == i);
+    if (logoutBtn.isVisible()) { m.addSeparator(); m.addItem (31, T8 ("Terminar sessão")); }
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (cogBtn), [this] (int r)
+    { if (r == 11) setLanguage (0); else if (r == 12) setLanguage (1); else if (r >= 21 && r <= 23) changeSkin (r - 21); else if (r == 31) logoutBtn.onClick(); });
+}
+
 void PrimeqEditor::presetMenu()
 {
     juce::PopupMenu m; const auto& fp = PrimeqProcessor::factoryPresets();
@@ -141,7 +163,7 @@ void PrimeqEditor::presetMenu()
     m.addSeparator(); m.addItem (9000, pqui::T8 ("Guardar preset..."));
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (presetBtn), [this, names] (int r)
     {
-        if (r >= 1 && r < 1000) { proc.loadFactoryPreset (r - 1); presetName = juce::String (juce::CharPointer_UTF8 (PrimeqProcessor::factoryPresets()[(size_t) r - 1].name)); presetBtn.setButtonText (presetName); }
+        if (r >= 1 && r < 1000) { presetIdx = r - 1; proc.loadFactoryPreset (r - 1); presetName = juce::String (juce::CharPointer_UTF8 (PrimeqProcessor::factoryPresets()[(size_t) r - 1].name)); presetBtn.setButtonText (presetName); }
         else if (r >= 1000 && r < 9000) { if (proc.loadUserPreset (names[r - 1000])) { presetName = names[r - 1000]; presetBtn.setButtonText (presetName); } }
         else if (r == 9000)
         {
