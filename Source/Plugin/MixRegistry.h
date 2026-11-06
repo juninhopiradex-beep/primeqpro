@@ -97,6 +97,11 @@ public:
     }
     void setGroup (int slot, int g) { if (slot >= 0) slots[(size_t) slot].group.store (std::min (4, std::max (1, g))); }
     int  group (int slot) const { return slot >= 0 ? slots[(size_t) slot].group.load() : 1; }
+    // ---- Visual Mixer: valores actuais (publicados pelo dono) e pedidos de alteracao (aplicados pelo dono na thread de mensagens)
+    void publishMixer (int slot, float gainDb, float panPct, float widthPct) noexcept { if (slot < 0) return; Slot& s = slots[(size_t) slot]; s.cur[0].store (gainDb, std::memory_order_relaxed); s.cur[1].store (panPct, std::memory_order_relaxed); s.cur[2].store (widthPct, std::memory_order_relaxed); }
+    void mixer (int slot, float out[3]) const noexcept { out[0] = 0.f; out[1] = 0.f; out[2] = 100.f; if (slot < 0) return; const Slot& s = slots[(size_t) slot]; for (int i = 0; i < 3; ++i) out[i] = s.cur[(size_t) i].load (std::memory_order_relaxed); }
+    void requestMixer (int slot, float gainDb, float panPct, float widthPct) noexcept { if (slot < 0) return; Slot& s = slots[(size_t) slot]; s.req[0].store (gainDb); s.req[1].store (panPct); s.req[2].store (widthPct); s.reqPending.store (true, std::memory_order_release); }
+    bool takeMixer (int slot, float out[3]) noexcept { if (slot < 0) return false; Slot& s = slots[(size_t) slot]; if (! s.reqPending.exchange (false, std::memory_order_acquire)) return false; for (int i = 0; i < 3; ++i) out[i] = s.req[(size_t) i].load(); return true; }
     void clearFrames (int slot) { if (slot >= 0) slots[(size_t) slot].head.store (0); }
 
     // ---- correio: uma instancia pede a outra para aplicar propostas (executado na thread de mensagens do alvo)
@@ -111,7 +116,7 @@ public:
 private:
     struct Slot
     {
-        std::atomic<int> group { 1 }; std::array<std::atomic<float>, (size_t) kMixBands * 3> sp {}; std::array<std::atomic<float>, 4> sg {}; std::atomic<bool> used { false }, analysing { false }, hasMail { false }; std::atomic<uint32_t> head { 0 }; std::atomic<float> overall { -120.f }, sampleRate { 48000.f };
+        std::atomic<int> group { 1 }; std::array<std::atomic<float>, (size_t) kMixBands * 3> sp {}; std::array<std::atomic<float>, 4> sg {}; std::atomic<bool> used { false }, analysing { false }, hasMail { false }, reqPending { false }; std::array<std::atomic<float>, 3> cur { { { 0.f }, { 0.f }, { 100.f } } }, req {}; std::atomic<uint32_t> head { 0 }; std::atomic<float> overall { -120.f }, sampleRate { 48000.f };
         std::array<std::atomic<float>, (size_t) kMixBands * kMixHist> lv {}; const void* owner = nullptr; std::string name; int priority = 2; std::vector<MixMail> mail;
     };
     mutable std::mutex m; std::array<Slot, kMixSlots> slots; int counter = 0;

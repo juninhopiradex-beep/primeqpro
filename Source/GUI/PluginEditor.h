@@ -11,6 +11,7 @@
 #include "../SmartOps/Profiles.h"
 #include "MixPanel.h"
 #include "MixMap3D.h"
+#include "VisualMixer.h"
 #include "AbxPanel.h"
 #include "StudioPanel.h"
 #include "Onboarding.h"
@@ -576,14 +577,24 @@ public:
     void resized() override;
     EqGraph& getGraph() { return graph; }
     void selectBand (int b) { graph.select (b); }
+    void updateOverlays() { graph.setVisible (! mix.isVisible() && ! map3d.isVisible() && ! vmix.isVisible()); }
     void showMap (bool s)
     {
         if (s && mix.isVisible()) showMix (false);
-        mapBtn.setToggleState (s, juce::dontSendNotification); map3d.setVisible (s); map3d.setActive (s); graph.setVisible (! s && ! mix.isVisible());
+        if (s && vmix.isVisible()) showMixer (false);
+        mapBtn.setToggleState (s, juce::dontSendNotification); map3d.setVisible (s); map3d.setActive (s); updateOverlays();
         if (s) map3d.toFront (false); resized();
     }
+    void showMixer (bool s)
+    {
+        if (s && mix.isVisible()) showMix (false);
+        if (s && map3d.isVisible()) showMap (false);
+        vmixBtn.setToggleState (s, juce::dontSendNotification); vmix.setVisible (s); vmix.setActive (s); updateOverlays();
+        if (s) vmix.toFront (false); resized();
+    }
+    pqui::VisualMixer& getVisualMixer() { return vmix; }
     pqui::MixMap3D& getMap() { return map3d; }
-    void showMix (bool s) { if (s) showMap (false); mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip }) c->setVisible (! s); fx.setVisible (! s && proc.uiMode != 0); if (s) { smart.setVisible (false); studio.setActive (false); studioBtn.setToggleState (false, juce::dontSendNotification); } else smart.setVisible (smartBtn.getToggleState()); resized(); }
+    void showMix (bool s) { if (s) { showMap (false); showMixer (false); } mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip }) c->setVisible (! s); fx.setVisible (! s && proc.uiMode != 0); if (s) { smart.setVisible (false); studio.setActive (false); studioBtn.setToggleState (false, juce::dontSendNotification); } else smart.setVisible (smartBtn.getToggleState()); resized(); }
     MixPanel& getMix() { return mix; }
     AbxPanel& getAbx() { return abx; }
     OnboardingOverlay& getGuide() { return guide; }
@@ -640,10 +651,10 @@ private:
     int shownSkin = pqui::skinIndex();
     PtGuard ptGuard;   // PRIMEIRO membro: forca PT durante a construcao para capturar os textos-fonte
     PrimeqProcessor& proc; pqui::Lnf lnf;
-    EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; pqui::MixMap3D map3d; LoginOverlay login; OnboardingOverlay guide;
+    EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; pqui::MixMap3D map3d; pqui::VisualMixer vmix; LoginOverlay login; OnboardingOverlay guide;
     juce::TextButton langBtn { "PT" }, skinBtn { "PRIME" };
     juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
-    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "ZONAS" }, mapBtn { "MAPA 3D" }, collBtn { "COLETIVO" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
+    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "ZONAS" }, mapBtn { "MAPA 3D" }, vmixBtn { "MIXER" }, collBtn { "COLETIVO" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;
     juce::String presetName { "Init (Flat)" }; bool wasUnlocked = true; int lastSel = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrimeqEditor)

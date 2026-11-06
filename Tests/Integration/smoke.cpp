@@ -579,6 +579,38 @@ int main()
         pqui::i18n::lang() = 1; pe->changeLanguage (1); pe->showMap (true); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("mapa3d_en.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
         pe->changeLanguage (0); pqui::i18n::lang() = 0; pe->showMap (false);
     }
+    // 27) Visual Mixer: pan/width por pista no audio, controlo entre instancias, snapshots, Balance Assistant
+    {
+        auto run = [&] (PrimeqProcessor& q, float* oL, float* oR) { juce::AudioBuffer<float> b (2, 512); juce::MidiBuffer mb; for (int k = 0; k < 40; ++k) { for (int i = 0; i < 512; ++i) { const float t = (float) (k * 512 + i); b.setSample (0, i, 0.4f * std::sin (0.05f * t)); b.setSample (1, i, 0.2f * std::sin (0.05f * t + 0.5f)); } q.processBlock (b, mb); } for (int i = 0; i < 512; ++i) { oL[i] = b.getSample (0, i); oR[i] = b.getSample (1, i); } };
+        float aL[512], aR[512], bL[512], bR[512];
+        { auto p0 = make (48000.0, 512); run (*p0, aL, aR); auto p1 = make (48000.0, 512); setP (*p1, "trk_width", 0); run (*p1, bL, bR); double dLR = 0, dm = 0; for (int i = 0; i < 512; ++i) { dLR = std::max (dLR, (double) std::fabs (bL[i] - bR[i])); dm = std::max (dm, (double) std::fabs (bL[i] - 0.5f * (aL[i] + aR[i]))); }
+          CHECK (dLR < 1e-5 && dm < 1e-4, "Width 0 %%: L == R == soma mono (|L-R| %.1e, desvio ao M %.1e)", dLR, dm); }
+        { auto p1 = make (48000.0, 512); setP (*p1, "trk_pan", 100); run (*p1, bL, bR); double eL = 0, eR = 0, rL = 0, rR = 0; for (int i = 0; i < 512; ++i) { eL += bL[i] * bL[i]; eR += bR[i] * bR[i]; rL += aL[i] * aL[i]; rR += aR[i] * aR[i]; }
+          CHECK (eL < 1e-6 * rL && std::fabs (eR - rR) < 1e-6 * rR, "Pan +100 %%: canal esquerdo silenciado, direito intacto (L %.1e, R %.1e)", eL / rL, eR / rR); }
+        { auto p0 = make (48000.0, 512); float cL[512], cR[512]; run (*p0, cL, cR); double d = 0; for (int i = 0; i < 512; ++i) d = std::max (d, (double) std::fabs (cL[i] - aL[i]) + std::fabs (cR[i] - aR[i])); CHECK (d == 0.0, "Pan 0 / Width 100 %%: saida identica (neutro)"); }
+        std::vector<std::unique_ptr<PrimeqProcessor>> ps; const char* nm[4] = { "Vocals", "Kick", "Bass", "Guitar" }; const float lv[4] = { -14.f, -10.f, -11.f, -18.f };
+        for (int i = 0; i < 4; ++i) { ps.push_back (make (48000.0, 512)); auto& q = *ps.back(); q.setTrackName (nm[i], true); pq::MixRegistry::get().setPriority (q.mixSlot(), i == 0 ? 5 : (i == 2 ? 3 : (i == 1 ? 3 : 2))); q.setAnalysing (true);
+            for (int f = 0; f < 60; ++f) { float db[pq::kMixBands]; for (int b = 0; b < pq::kMixBands; ++b) db[b] = lv[i] - 4.f * std::fabs ((float) (b - 6 - 4 * i)); pq::MixRegistry::get().pushFrame (q.mixSlot(), db, lv[i]); }
+            pq::SpatialStats st; st.rmsDb = lv[i]; pq::MixRegistry::get().pushStats (q.mixSlot(), st); }
+        std::unique_ptr<juce::AudioProcessorEditor> ed (ps[0]->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860);
+        pe->showMixer (true); auto& vm = pe->getVisualMixer(); vm.refresh();
+        CHECK (vm.nodes().size() >= 4, "Visual Mixer: %d nos", (int) vm.nodes().size());
+        vm.setTrack (ps[1]->mixSlot(), { -3.f, 35.f, 150.f }); ps[1]->pollMixMail();
+        CHECK (std::fabs (ps[1]->getParamReal ("out") + 3.f) < 0.05f && std::fabs (ps[1]->getParamReal ("trk_pan") - 35.f) < 0.2f && std::fabs (ps[1]->getParamReal ("trk_width") - 150.f) < 0.2f, "Visual Mixer: pedido chega a outra instancia (gain %.2f pan %.1f width %.1f)", ps[1]->getParamReal ("out"), ps[1]->getParamReal ("trk_pan"), ps[1]->getParamReal ("trk_width"));
+        vm.setTrack (ps[0]->mixSlot(), { 2.f, -20.f, 80.f }); CHECK (std::fabs (ps[0]->getParamReal ("trk_pan") + 20.f) < 0.2f, "Visual Mixer: a propria instancia muda directamente");
+        vm.refresh(); vm.saveSnapshot (0); vm.setTrack (ps[1]->mixSlot(), { 0.f, 0.f, 100.f }); ps[1]->pollMixMail(); vm.refresh(); vm.recallSnapshot (0); ps[1]->pollMixMail();
+        CHECK (std::fabs (ps[1]->getParamReal ("trk_pan") - 35.f) < 0.2f, "Visual Mixer: snapshot A repoe o estado guardado (pan %.1f)", ps[1]->getParamReal ("trk_pan"));
+        for (auto& q : ps) q->pollMixMail(); vm.refresh();
+        const int n = vm.runAssistant(); for (auto& q : ps) q->pollMixMail();
+        CHECK (n >= 4, "Balance Assistant: propoe %d pistas", n);
+        CHECK (std::fabs (ps[0]->getParamReal ("out")) < 0.05f && std::fabs (ps[0]->getParamReal ("trk_pan")) < 0.2f, "Balance Assistant: voz fica a 0 dB e ao centro");
+        CHECK (std::fabs (ps[1]->getParamReal ("trk_pan")) < 0.2f && std::fabs (ps[3]->getParamReal ("trk_pan")) > 20.f, "Balance Assistant: kick ao centro, guitarra afastada (pan %.0f)", ps[3]->getParamReal ("trk_pan"));
+        { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("visual_mixer.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+        vm.undoAssistant(); for (auto& q : ps) q->pollMixMail(); CHECK (std::fabs (ps[1]->getParamReal ("trk_pan") - 35.f) < 0.2f && std::fabs (ps[0]->getParamReal ("trk_pan") + 20.f) < 0.2f, "Balance Assistant: DESFAZER repoe os valores");
+        pqui::i18n::lang() = 1; pe->changeLanguage (1); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("visual_mixer_en.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+        pe->changeLanguage (0); pqui::i18n::lang() = 0; pe->showMixer (false);
+        { juce::MemoryBlock mb; ps[1]->getStateInformation (mb); auto q = make (48000.0, 512); q->setStateInformation (mb.getData(), (int) mb.getSize()); CHECK (std::fabs (q->getParamReal ("trk_width") - 150.f) < 0.2f, "Pan/Width guardados no estado do plugin"); }
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }

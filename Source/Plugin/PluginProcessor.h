@@ -143,7 +143,7 @@ private:
     struct BandPtrs { std::atomic<float> *on, *type, *freq, *gain, *q, *slope, *place, *dyn, *thr, *range, *ratio, *attack, *hold, *release, *knee, *det, *dir, *ts; };
     std::array<BandPtrs, pq::kNumBands> bp {};
     std::atomic<float> *pTsSep = nullptr, *pTsSmooth = nullptr, *pTsEngine = nullptr;
-    std::atomic<float> *pPhase = nullptr, *pBypass = nullptr, *pOut = nullptr, *pAuto = nullptr, *pDelta = nullptr, *pScExt = nullptr;
+    std::atomic<float> *pPhase = nullptr, *pBypass = nullptr, *pOut = nullptr, *pTrkPan = nullptr, *pTrkWid = nullptr, *pAuto = nullptr, *pDelta = nullptr, *pScExt = nullptr;
     std::atomic<float> *pLook = nullptr, *pDhOn = nullptr, *pDhAmt = nullptr, *pDhLo = nullptr, *pDhHi = nullptr, *pDhSens = nullptr, *pDhAtk = nullptr, *pDhRel = nullptr, *pDhDelta = nullptr;
     std::atomic<float> *pChMode = nullptr, *pChDrive = nullptr, *pChMix = nullptr, *pChOs = nullptr, *pMorphOn = nullptr, *pMorph = nullptr;
 
@@ -174,7 +174,7 @@ private:
     std::vector<double> dL, dR, sL, sR; std::vector<float> fIn[2], fOut[2], dryRing[2], oL, oR, pL, pR, fTmp;
     int dryW = 0, primeLeft = 0;
     double abxAcc = 0; int abxN = 0; double abxE[2] { 0, 0 };
-    float fadeGain = 1.f, fadeTarget = 1.f, bypState = 0.f, gainState = 1.f, agState = 0.f, abxState = 1.f; int path = 0;
+    float fadeGain = 1.f, fadeTarget = 1.f, bypState = 0.f, gainState = 1.f, agState = 0.f, abxState = 1.f; int path = 0; double panState = 0.0, widState = 1.0;
 
     // FIR
     juce::dsp::ConvolutionMessageQueue convQueue { 128 };

@@ -99,7 +99,7 @@ public:
         r << nl << "## Doutor: " << juce::String (juce::CharPointer_UTF8 (pq::symptomName ((pq::Symptom) symptom))) << nl; for (const auto& e : docR.evidence) r << "- Evidencia: " << juce::String (juce::CharPointer_UTF8 (e.c_str())) << nl;
         for (const auto& h : docR.hyps) r << "- Hipotese (" << juce::String (juce::CharPointer_UTF8 (pq::verdictName (h.v))) << "): " << juce::String (juce::CharPointer_UTF8 (h.text.c_str())) << nl;
         if (cons.sc.size() == 4) { r << nl << "## Cenarios" << nl; for (const auto& s : cons.sc) r << "- " << juce::String (juce::CharPointer_UTF8 (s.name.c_str())) << ": masking restante " << juce::String (s.maskRemainPct, 0) << "%, nivel da soma " << juce::String (s.mixRmsDb, 2) << " dB, corte desnecessario " << juce::String (s.collateralPct, 0) << "%" << nl; }
-        r << nl << "## Limitacoes" << nl << T8 ("- So ve instancias no mesmo processo e grupo. O plugin nao tem panner: pan candidato e sugestao. Nao mede reverb, dicção ou preferencia auditiva.") << nl;
+        r << nl << "## Limitacoes" << nl << T8 ("- So ve instancias no mesmo processo e grupo. Pan candidato e sugestao: aplica-o no Visual Mixer (MIXER) ou no panner da pista. Nao mede reverb, dicção ou preferencia auditiva.") << nl;
         return r;
     }
 
@@ -376,7 +376,7 @@ private:
         auto tb = juce::Rectangle<int> (r.getX(), content().getY() + 20 + 5 * 76 + 4, r.getWidth(), 120); g.setColour (kPanel2); g.fillRoundedRectangle (tb.toFloat(), 8.f); auto ti = tb.reduced (10, 6);
         txt (g, T8 ("PISTA · TIPO · CORRELAÇÃO · PERDA EM MONO"), ti.removeFromTop (16), 10.f, kText, true);
         for (size_t i = 0; i < tracks.size() && i < 4; ++i) txt (g, nameOf ((int) i) + T8 (" · ") + U (pq::srcKindName (i < space.kind.size() ? space.kind[i] : pq::SrcKind::Stereo)) + T8 (" · ") + juce::String (tracks[i].st.corrAll, 2) + T8 (" · ") + juce::String (-tracks[i].st.monoLossAll, 1) + " dB", ti.removeFromTop (18), 10.5f, kDim);
-        wrap (g, T8 ("O plugin não tem panner: o \"pan candidato\" é uma sugestão para fazer na pista. Um EQ M/S não desloca instrumentos já somados numa mistura estéreo."), { r.getX(), tb.getBottom() + 6, r.getWidth(), 34 }, 9.5f, kDim, 2);
+        wrap (g, T8 ("O \"pan candidato\" é uma sugestão: aplica-o no Visual Mixer (botão MIXER) ou na pista. Um EQ M/S não desloca instrumentos já somados numa mistura estéreo."), { r.getX(), tb.getBottom() + 6, r.getWidth(), 34 }, 9.5f, kDim, 2);
     }
 
     // ---------- DOUTOR

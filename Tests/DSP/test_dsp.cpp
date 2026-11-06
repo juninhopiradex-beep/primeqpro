@@ -23,6 +23,7 @@
 #include "../../Source/SmartOps/Profiles.h"
 #include "../../Source/SmartOps/Confidence.h"
 #include "../../Source/Plugin/Collective.h"
+#include "../../Source/SmartOps/Balance.h"
 #include <chrono>
 #include <cstdio>
 #include <random>
@@ -650,6 +651,17 @@ int main()
         pq::Collective::analyse (col);
         CHECK (col.clash[10] > 0.5f && col.clash[3] < 0.01f && col.clashBands == 1, "Colectivo: choque so onde duas pistas fortes coincidem (sev %.2f, %d banda)", col.clash[10], col.clashBands);
         CHECK (std::fabs (col.norm01 (col.refDb) - 1.f) < 1e-6f && col.norm01 (-120.f) == 0.f, "Colectivo: normalizacao 0..1 relativa ao mais forte");
+    }
+    // Balance Assistant
+    {
+        std::vector<pq::BalanceIn> in; const char* nm[4] = { "Vocals", "Kick", "Bass", "Guitar" }; const int pr[4] = { 5, 3, 3, 2 }; const double lv[4] = { -14, -10, -11, -18 };
+        for (int i = 0; i < 4; ++i) { pq::BalanceIn b; b.slot = i; b.name = nm[i]; b.priority = pr[i]; b.kick = i == 1; b.levelDb = lv[i]; in.push_back (b); }
+        const auto o = pq::balancePropose (in);
+        CHECK (o.size() == 4 && o[0].gainDb == 0.f && o[0].panPct == 0.f, "Balance: voz = referencia (0 dB, centro)");
+        CHECK (std::fabs (o[1].gainDb - 0.f) < 0.01f || o[1].gainDb < 0.f, "Balance: kick mais forte que o alvo e atenuado (%.1f dB)", o[1].gainDb);
+        CHECK (o[1].panPct == 0.f && o[1].widthPct == 60.f && o[3].panPct != 0.f && std::fabs (o[3].panPct) <= 45.f, "Balance: kick ao centro e estreito, guitarra afastada (%.0f %%)", o[3].panPct);
+        CHECK (pq::balancePropose ({ in[0] }).empty(), "Balance: uma pista so nao gera proposta");
+        std::vector<pq::BalanceIn> x = in; x[0].levelDb = -120; x[1].levelDb = -120; x[2].levelDb = -120; CHECK (pq::balancePropose (x).empty(), "Balance: ignora pistas sem nivel medido");
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;

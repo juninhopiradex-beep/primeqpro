@@ -60,6 +60,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout PrimeqProcessor::createLayou
     L.add (std::make_unique<APC> (PID ("phase"), "Phase Mode", juce::StringArray { "Zero Latency", "Natural Phase", "Linear Phase" }, 0));
     L.add (std::make_unique<APB> (PID ("bypass"), "Bypass", false));
     L.add (std::make_unique<APF> (PID ("out"), "Output Gain", juce::NormalisableRange<float> (-24.f, 24.f, 0.01f), 0.f, FA().withLabel ("dB")));
+    L.add (std::make_unique<APF> (PID ("trk_pan"), "Track Pan", juce::NormalisableRange<float> (-100.f, 100.f, 0.1f), 0.f, FA().withLabel ("%")));
+    L.add (std::make_unique<APF> (PID ("trk_width"), "Track Width", juce::NormalisableRange<float> (0.f, 200.f, 0.1f), 100.f, FA().withLabel ("%")));
     L.add (std::make_unique<APB> (PID ("autogain"), "Auto Gain", false));
     L.add (std::make_unique<APB> (PID ("delta"), "Delta", false));
     L.add (std::make_unique<APB> (PID ("scext"), "External Sidechain", false));
@@ -101,7 +103,7 @@ PrimeqProcessor::PrimeqProcessor()
         bp[(size_t) b] = { g ("on"), g ("type"), g ("freq"), g ("gain"), g ("q"), g ("slope"), g ("place"), g ("dyn"), g ("thr"), g ("range"), g ("ratio"), g ("attack"), g ("hold"), g ("release"), g ("knee"), g ("det"), g ("dir"), g ("ts") };
     }
     pTsSep = apvts.getRawParameterValue ("ts_sep"); pTsSmooth = apvts.getRawParameterValue ("ts_smooth"); pTsEngine = apvts.getRawParameterValue ("ts_engine");
-    pPhase = apvts.getRawParameterValue ("phase"); pBypass = apvts.getRawParameterValue ("bypass"); pOut = apvts.getRawParameterValue ("out");
+    pPhase = apvts.getRawParameterValue ("phase"); pBypass = apvts.getRawParameterValue ("bypass"); pOut = apvts.getRawParameterValue ("out"); pTrkPan = apvts.getRawParameterValue ("trk_pan"); pTrkWid = apvts.getRawParameterValue ("trk_width");
     pAuto = apvts.getRawParameterValue ("autogain"); pDelta = apvts.getRawParameterValue ("delta"); pScExt = apvts.getRawParameterValue ("scext");
     auto G = [&] (const char* k) { return apvts.getRawParameterValue (k); };
     pLook = G ("look"); pDhOn = G ("dh_on"); pDhAmt = G ("dh_amount"); pDhLo = G ("dh_lo"); pDhHi = G ("dh_hi"); pDhSens = G ("dh_sens"); pDhAtk = G ("dh_attack"); pDhRel = G ("dh_release"); pDhDelta = G ("dh_delta");
@@ -162,6 +164,9 @@ void PrimeqProcessor::pollMixMail()
 {
     auto& rg = pq::MixRegistry::get(); pq::MixMail m; int guard = 0;
     while (guard++ < 8 && rg.takeMail (mixSlotId, m)) smartApply (m.props, m.undoName.c_str());
+    float rq[3];
+    if (rg.takeMixer (mixSlotId, rq)) { setParamReal ("out", rq[0]); setParamReal ("trk_pan", rq[1]); setParamReal ("trk_width", rq[2]); }
+    rg.publishMixer (mixSlotId, getParamReal ("out"), getParamReal ("trk_pan"), getParamReal ("trk_width"));
 }
 
 void PrimeqProcessor::parameterChanged (const juce::String&, float) { updateLatency(); }
@@ -309,7 +314,7 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     const bool wantFir = tgt.path == 1;
     const int latDry = std::min (stageLatency (tgt), kDryCap - kChunk - 1);
     const float fadeStep = (float) (1.0 / (0.008 * sr)), bk = (float) (1.0 - std::exp (-1.0 / (0.005 * sr))), gk = (float) (1.0 - std::exp (-1.0 / (0.02 * sr)));
-    const double outDb = pOut->load();
+    const double outDb = pOut->load(), panT = pTrkPan->load() / 100.0, widT = pTrkWid->load() / 100.0;
     if (tgt.dh)
     {
         DeHarshParams hp; hp.amount = pDhAmt->load() / 100.0; hp.loHz = pDhLo->load(); hp.hiHz = pDhHi->load(); hp.sensDb = pDhSens->load();
@@ -419,6 +424,14 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
                 if (std::fabs ((float) gTarget - gainState) < 1e-6f) gainState = (float) gTarget;
                 oLd = bypState * dryL + (1.0 - bypState) * wL; oRd = bypState * dryR + (1.0 - bypState) * wR;
                 if (! std::isfinite (oLd)) oLd = 0.0; if (! std::isfinite (oRd)) oRd = 0.0;
+                // Visual Mixer: width (M/S) e pan (balanco, lei cos) por pista; neutro = sem alteracao
+                panState += (panT - panState) * gk; widState += (widT - widState) * gk;
+                if (std::fabs (panT - panState) < 1e-6) panState = panT; if (std::fabs (widT - widState) < 1e-6) widState = widT;
+                if (wr && (panState != 0.0 || widState != 1.0))
+                {
+                    const double M = 0.5 * (oLd + oRd), S = 0.5 * (oLd - oRd) * widState; oLd = M + S; oRd = M - S;
+                    if (panState > 0.0) oLd *= std::cos (panState * 1.5707963267948966); else if (panState < 0.0) oRd *= std::cos (-panState * 1.5707963267948966);
+                }
             }
             oL[(size_t) i] = (float) oLd; oR[(size_t) i] = (float) oRd;
             wl[off + i] = (float) oLd; if (wr) wr[off + i] = (float) oRd;
