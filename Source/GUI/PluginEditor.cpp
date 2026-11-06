@@ -36,7 +36,7 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     applyMode();
     captureLanguage(); pqui::i18n::forcePt() = false;
     pqui::i18n::lang() = AccessManager::get().language(); applyLanguage();
-    setResizable (true, true); setResizeLimits (1000, 740, 2600, 1700);
+    setResizable (true, true); setResizeLimits (1100, 740, 2600, 1700);
     setSize (proc.uiWidth, proc.uiHeight);
     startTimerHz (30);
 }
@@ -52,7 +52,7 @@ void PrimeqEditor::paint (juce::Graphics& g)
       g.setGradientFill (ln); g.fillRect (0.f, 45.f, (float) getWidth(), 1.5f); }
     g.setGradientFill (juce::ColourGradient (kTeal, 18.f, 8.f, kText, 190.f, 8.f, false));
     g.setFont (fontOf (22.f, true)); g.drawText ("PRIMEQ PRO", 16, 6, 150, 34, juce::Justification::centredLeft);
-    g.setColour (kDim); g.setFont (fontOf (11.f)); g.drawText ("by Piradex", 138, 12, 80, 28, juce::Justification::centredLeft);
+    g.setColour (kDim); g.setFont (fontOf (11.f)); g.drawText ("by Piradex", 148, 12, 80, 28, juce::Justification::centredLeft);
     g.setColour (kDim); g.setFont (fontOf (11.f));
     g.drawText (AccessManager::get().roleText() + "   v" + juce::String (JucePlugin_VersionString), getWidth() - 330, getHeight() - 16, 320, 14, juce::Justification::centredRight);
 }
@@ -61,11 +61,18 @@ void PrimeqEditor::resized()
 {
     auto r = getLocalBounds().reduced (10, 6);
     auto head = r.removeFromTop (38);
-    head.removeFromLeft (220);
-    presetBtn.setBounds (head.removeFromLeft (140)); head.removeFromLeft (6);
-    undoBtn.setBounds (head.removeFromLeft (52)); head.removeFromLeft (4); redoBtn.setBounds (head.removeFromLeft (52)); head.removeFromLeft (6); abBtn.setBounds (head.removeFromLeft (38));
-    langBtn.setBounds (head.removeFromRight (40)); head.removeFromRight (4); skinBtn.setBounds (head.removeFromRight (62)); head.removeFromRight (6); logoutBtn.setBounds (head.removeFromRight (54)); head.removeFromRight (6); helpBtn.setBounds (head.removeFromRight (30)); head.removeFromRight (6); smartBtn.setBounds (head.removeFromRight (88)); head.removeFromRight (4); studioBtn.setBounds (head.removeFromRight (78)); head.removeFromRight (4); mixBtn.setBounds (head.removeFromRight (96)); head.removeFromRight (4); zonesBtn.setBounds (head.removeFromRight (62)); head.removeFromRight (4); abxBtn.setBounds (head.removeFromRight (46)); head.removeFromRight (4); modeBox.setBounds (head.removeFromRight (84)); head.removeFromRight (4); bypassBtn.setBounds (head.removeFromRight (76)); head.removeFromRight (6);
-    phaseBox.setBounds (head.removeFromRight (110)); phaseLbl.setBounds (head.removeFromRight (34));
+    {
+        // cabecalho adaptativo: larguras ideais reduzidas proporcionalmente quando a janela e estreita (nada fica a largura zero)
+        struct It { juce::Component* c; int w; }; const int gap = 4;
+        std::vector<It> left { { &presetBtn, 128 }, { &undoBtn, 46 }, { &redoBtn, 46 }, { &abBtn, 34 } };
+        std::vector<It> right { { &langBtn, 38 }, { &skinBtn, 64 }, { &logoutBtn, logoutBtn.isVisible() ? 48 : 0 }, { &helpBtn, 28 }, { &smartBtn, smartBtn.isVisible() ? 86 : 0 }, { &studioBtn, 74 }, { &mixBtn, 94 }, { &zonesBtn, 58 },
+                                { &abxBtn, 44 }, { &modeBox, 82 }, { &bypassBtn, 74 }, { &phaseBox, 108 }, { &phaseLbl, 34 } };
+        int logoW = 190, sum = logoW; int n = 0; for (auto& i : left) { sum += i.w; ++n; } for (auto& i : right) if (i.w > 0) { sum += i.w; ++n; }
+        sum += gap * n; const double sc = std::min (1.0, (double) head.getWidth() / (double) sum);
+        head.removeFromLeft ((int) (logoW * sc));
+        for (auto& i : left) { i.c->setBounds (head.removeFromLeft ((int) (i.w * sc))); head.removeFromLeft ((int) (gap * sc)); }
+        for (auto& i : right) { if (i.w <= 0) continue; i.c->setBounds (head.removeFromRight ((int) (i.w * sc))); head.removeFromRight ((int) (gap * sc)); }
+    }
     r.removeFromTop (6);
     r.removeFromBottom (14);
     if (mix.isVisible()) { mix.setBounds (r); login.setBounds (getLocalBounds()); proc.uiWidth = getWidth(); proc.uiHeight = getHeight(); return; }
