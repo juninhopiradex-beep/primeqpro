@@ -637,7 +637,7 @@ int main()
         pe->getGraph().select (7); CHECK (p0->listenBand.load() == 7, "OUVIR segue a banda selecionada (7)");
         p0->listenBand.store (-1);
         pe->showSmart (true); pe->resized();
-        { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("ui_smart_chips.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+        { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("ui_smart_menu.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
         pe->showSmart (false);
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);

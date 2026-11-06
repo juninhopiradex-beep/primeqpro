@@ -1,4 +1,8 @@
 # Changelog
+## 1.12.0 — MEDIDOR NOVO E AJUSTES
+- **Medidor de saída**: escala −60…+3 dB (margem acima do 0), núcleo = nível médio, camada fraca = pico, traço branco = pico retido, cor muda com o nível; CLIP só acende em 0 dBFS (clique limpa).
+- **Smart Ops**: volta ao menu de perfis (agora com 24 perfis no Deresonate e 20 nos outros).
+- Menu ⚙: idioma mostra **PT** / **EN**.
 ## 1.11.0 — SMART OPS, ⚙ OPÇÕES E PRESETS
 - **Smart Ops**: 24 perfis no Deresonate (novos: Sopros, Podcast, Sala, Voz ao vivo, Sample/loop) e 20 em De-Ess, Match e Unmask; os perfis aparecem como botões numa grelha com scroll (1 clique; clicar de novo volta a "personalizado").
 - **OUVIR segue a seleção**: com OUVIR ligado, clicar noutro ponto/banda passa a ouvir essa banda.

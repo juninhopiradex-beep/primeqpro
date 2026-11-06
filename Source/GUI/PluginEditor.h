@@ -31,6 +31,10 @@ public:
     {
         const float a = proc.meterL.exchange (0.f), b = proc.meterR.exchange (0.f);
         lv[0] = std::max (a, lv[0] * 0.86f); lv[1] = std::max (b, lv[1] * 0.86f);
+        { const float in[2] { a, b }; const auto t = juce::Time::getMillisecondCounter();
+          for (int c = 0; c < 2; ++c)
+          { avg[c] = in[c] > avg[c] ? avg[c] + (in[c] - avg[c]) * 0.30f : avg[c] * 0.94f;
+            if (in[c] >= hold[c]) { hold[c] = in[c]; holdT[c] = t; } else if (t - holdT[c] > 1200) hold[c] = std::max (in[c], hold[c] * 0.97f); } }
         const auto now = juce::Time::getMillisecondCounter();
         if (a >= 1.0f || b >= 1.0f) clipUntil = now + 2500;
         clip = now < clipUntil; repaint();
@@ -64,28 +68,38 @@ public:
             g.setColour (clip ? juce::Colours::white : kDim); g.setFont (fontOf (9.f, true)); g.drawText ("CLIP", cb, juce::Justification::centred);
             return;
         }
+        // vertical: escala -60..+3 dB (margem acima do 0); nucleo = nivel medio, camada fraca = pico, traco branco = pico retido
+        constexpr float lo = -60.f, hi = 3.f;
         const float scW = scale ? 26.f : 0.f; auto barsR = r.withTrimmedRight (scW).withTrimmedTop (7.f);
-        r = barsR;
+        r = barsR; const float barH = r.getHeight() - 12.f;
+        auto yOf = [&] (float db) { return r.getY() + barH * (1.f - juce::jlimit (0.f, 1.f, (db - lo) / (hi - lo))); };
         for (int c = 0; c < 2; ++c)
         {
-            auto bar = juce::Rectangle<float> (r.getX() + c * (r.getWidth() * 0.5f), r.getY(), r.getWidth() * 0.5f - 2.f, r.getHeight() - 12.f);
+            auto bar = juce::Rectangle<float> (r.getX() + c * (r.getWidth() * 0.5f), r.getY(), r.getWidth() * 0.5f - 2.f, barH);
             g.setColour (kPanel2); g.fillRoundedRectangle (bar, 3.f);
-            const float db = juce::Decibels::gainToDecibels (lv[c], -90.f), t = juce::jlimit (0.f, 1.f, (db + 60.f) / 60.f);
-            auto fill = bar.withTrimmedTop (bar.getHeight() * (1.f - t));
-            g.setColour (db > -1.f ? kRed : (db > -9.f ? kWarn : kTeal)); g.fillRoundedRectangle (fill, 3.f);
+            const float dbP = juce::Decibels::gainToDecibels (lv[c], -90.f), dbA = juce::Decibels::gainToDecibels (avg[c], -90.f), dbH = juce::Decibels::gainToDecibels (hold[c], -90.f);
+            auto layer = [&] (float db, float alpha, bool core)
+            {
+                const float y = yOf (db); if (y >= bar.getBottom() - 0.5f) return;
+                auto fill = juce::Rectangle<float> (bar.getX(), y, bar.getWidth(), bar.getBottom() - y);
+                juce::ColourGradient gr (kRed.withAlpha (alpha), 0.f, yOf (0.f), kTeal.withAlpha (alpha), 0.f, yOf (-24.f), false);
+                gr.addColour (0.25, kWarn.withAlpha (alpha)); g.setGradientFill (gr); g.fillRoundedRectangle (fill, core ? 3.f : 2.f);
+            };
+            layer (dbP, 0.30f, false); layer (dbA, 1.0f, true);
+            if (dbH > lo) { g.setColour (juce::Colours::white.withAlpha (0.9f)); g.fillRect (bar.getX(), yOf (dbH) - 1.f, bar.getWidth(), 2.f); }
         }
         g.setColour (clip ? kRed : kPanel2); g.fillRoundedRectangle (r.getX(), r.getBottom() - 10.f, r.getWidth() - 2.f, 9.f, 3.f);
         g.setColour (clip ? juce::Colours::white : kDim); g.setFont (fontOf (8.f, true)); g.drawText ("CLIP", getLocalBounds().removeFromBottom (10).withWidth ((int) r.getWidth()), juce::Justification::centred);
         if (scale)
         {
             g.setFont (fontOf (8.f)); g.setColour (kDim);
-            for (int d : { 0, -6, -12, -24, -36, -48 })
-            { const float y = r.getY() + (r.getHeight() - 12.f) * (1.f - (float) (d + 60) / 60.f); g.drawText (juce::String (d), juce::Rectangle<float> (r.getRight() + 1.f, y - 5.f, scW, 10.f), juce::Justification::centredLeft); g.fillRect (r.getRight() - 3.f, y, 3.f, 1.f); }
+            for (int d : { 3, 0, -6, -12, -24, -36, -48 })
+                g.drawText (juce::String (d), juce::Rectangle<float> (r.getRight() + 1.f, yOf ((float) d) - 5.f, scW, 10.f), juce::Justification::centredLeft);
         }
     }
 private:
     bool horiz = false, scale = false;
-    PrimeqProcessor& proc; float lv[2] { 0.f, 0.f }; juce::uint32 clipUntil = 0; bool clip = false;
+    PrimeqProcessor& proc; float lv[2] { 0.f, 0.f }, avg[2] { 0.f, 0.f }, hold[2] { 0.f, 0.f }; juce::uint32 holdT[2] { 0, 0 }; juce::uint32 clipUntil = 0; bool clip = false;
 };
 
 // ------------------------------------------------------------------------------------------ inspector da banda selecionada
@@ -433,7 +447,7 @@ public:
         using namespace pqui;
         opBox.addItem ("Deresonate", Deres); opBox.addItem ("De-Ess", DeEssOp); opBox.addItem ("Reference Match", MatchOp); opBox.addItem ("Unmask (sidechain)", UnmaskOp); opBox.addItem ("Morph A \xE2\x86\x94 B", MorphOp);
         opBox.setSelectedId (Deres, juce::dontSendNotification); opBox.onChange = [this] { configureOp(); }; addAndMakeVisible (opBox);
-        profileBox.setTooltip (T8 ("Perfil de partida para esta operação (valores editáveis)")); profileBox.onChange = [this] { applyProfile(); syncChips(); }; addChildComponent (profileBox); chipView.setViewedComponent (&chipHolder, false); chipView.setScrollBarsShown (true, false); addAndMakeVisible (chipView);
+        profileBox.setTooltip (T8 ("Perfil de partida para esta operação (valores editáveis)")); profileBox.onChange = [this] { applyProfile(); }; addAndMakeVisible (profileBox);
         modeBox.addItem ("Analisar", 1); modeBox.addItem ("Assistir", 2); modeBox.addItem ("Auto (opt-in)", 3); modeBox.setSelectedId (2, juce::dontSendNotification); addAndMakeVisible (modeBox);
         modeBox.setTooltip (T8 ("Analisar: só mostra evidências e sugestões, nada é aplicado · Assistir: pré-visualiza e você aplica · Auto: aplica sozinho ao parar o Learn, só com confiança média/alta (Revert desfaz)"));
         for (auto* b : { &learnB, &stopB, &applyB, &revertB, &loadRefB, &capA, &capB, &clearMorphB }) addAndMakeVisible (b);
@@ -476,8 +490,8 @@ public:
         auto r = getLocalBounds().reduced (12, 10); r.removeFromTop (22);
         opBox.setBounds (r.removeFromTop (28)); r.removeFromTop (6);
         const bool morph = op() == MorphOp, match = op() == MatchOp;
-        modeBox.setVisible (! morph); chipView.setVisible (! morph);
-        if (! morph) { layoutChips (r.removeFromTop (118)); r.removeFromTop (4); modeBox.setBounds (r.removeFromTop (26)); r.removeFromTop (6); } else r.removeFromTop (2);
+        modeBox.setVisible (! morph); profileBox.setVisible (! morph);
+        if (! morph) { profileBox.setBounds (r.removeFromTop (26)); r.removeFromTop (4); modeBox.setBounds (r.removeFromTop (26)); r.removeFromTop (6); } else r.removeFromTop (2);
         for (auto* c : std::initializer_list<juce::Component*> { &learnB, &stopB, &applyB, &revertB, &sens, &maxCut, &maxBands, &lSens, &lCut, &lBands }) c->setVisible (! morph);
         for (auto* c : std::initializer_list<juce::Component*> { &capA, &capB, &clearMorphB, &morphOnB, &morphS, &lMorph }) c->setVisible (morph);
         loadRefB.setVisible (match);
@@ -522,35 +536,7 @@ private:
         profileBox.clear (juce::dontSendNotification); profLo = 0; profHi = 1e9;
         profileBox.addItem (T8 ("Perfil: personalizado"), 1); int id = 2;
         for (const auto& pr : pq::profiles::of (op())) profileBox.addItem (T8 (pr.name), id++);
-        profileBox.setSelectedId (1, juce::dontSendNotification); buildChips();
-    }
-    void buildChips()
-    {
-        chips.clear(); chipHolder.removeAllChildren(); int k = 0;
-        for (const auto& pr : pq::profiles::of (op()))
-        {
-            auto* b = chips.add (new juce::TextButton (T8 (pr.name))); b->setClickingTogglesState (false); b->setTooltip (T8 (pr.note));
-            const int id = k + 2; b->onClick = [this, id] { profileBox.setSelectedId (profileBox.getSelectedId() == id ? 1 : id, juce::sendNotificationSync); };
-            chipHolder.addAndMakeVisible (b); ++k;
-        }
-        layoutChips (chipView.getBounds()); syncChips();
-    }
-    void layoutChips (juce::Rectangle<int> area)
-    {
-        if (! area.isEmpty()) chipView.setBounds (area);
-        const int w = std::max (60, chipView.getWidth() - chipView.getScrollBarThickness()), cw = w / 2, ch = 26;
-        for (int i = 0; i < chips.size(); ++i) chips[i]->setBounds ((i % 2) * cw, (i / 2) * ch, cw - 3, ch - 3);
-        chipHolder.setSize (w, ((chips.size() + 1) / 2) * ch);
-    }
-    void syncChips()
-    {
-        for (int i = 0; i < chips.size(); ++i)
-        {
-            const bool on = profileBox.getSelectedId() == i + 2;
-            chips[i]->setColour (juce::TextButton::buttonColourId, on ? pqui::kTeal : pqui::kPanel.brighter (0.15f));
-            chips[i]->setColour (juce::TextButton::textColourOffId, on ? juce::Colours::black : pqui::kText);
-            chips[i]->repaint();
-        }
+        profileBox.setSelectedId (1, juce::dontSendNotification); 
     }
     void applyProfile()
     {
@@ -665,7 +651,7 @@ private:
     }
     void setStatus (const juce::String& s) { status.setText (s, juce::dontSendNotification); }
     PrimeqProcessor& proc; EqGraph& graph; bool learned = false;
-    juce::ComboBox opBox, modeBox, profileBox; juce::Viewport chipView; juce::Component chipHolder; juce::OwnedArray<juce::TextButton> chips; double profLo = 0, profHi = 1e9; pq::Confidence lastConf; juce::TextButton learnB { "Learn" }, stopB { "Stop" }, applyB { "Apply" }, revertB { "Revert" }, loadRefB { "Carregar refer\xC3\xAAncia..." }, capA { "Guardar A" }, capB { "Guardar B" }, clearMorphB { "Limpar A/B" };
+    juce::ComboBox opBox, modeBox, profileBox; double profLo = 0, profHi = 1e9; pq::Confidence lastConf; juce::TextButton learnB { "Learn" }, stopB { "Stop" }, applyB { "Apply" }, revertB { "Revert" }, loadRefB { "Carregar refer\xC3\xAAncia..." }, capA { "Guardar A" }, capB { "Guardar B" }, clearMorphB { "Limpar A/B" };
     juce::ToggleButton morphOnB; juce::Slider sens, maxCut, maxBands, morphS; juce::Label lSens, lCut, lBands, status, note, lMorph;
     std::unique_ptr<ButtonAtt> aMorphOn; std::unique_ptr<SliderAtt> aMorph; std::unique_ptr<juce::FileChooser> chooser;
 };

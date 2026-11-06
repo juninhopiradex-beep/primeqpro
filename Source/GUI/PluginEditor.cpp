@@ -137,7 +137,7 @@ void PrimeqEditor::optionsMenu()
 {
     using pqui::T8; juce::PopupMenu m; const bool en = pqui::i18n::lang().load() != 0; const int sk = pqui::skinIndex();
     m.addSectionHeader (T8 ("Idioma"));
-    m.addItem (11, "Português", true, ! en); m.addItem (12, "English", true, en);
+    m.addItem (11, "PT", true, ! en); m.addItem (12, "EN", true, en);
     m.addSectionHeader (T8 ("Cor (skin)"));
     for (int i = 0; i < 3; ++i) m.addItem (21 + i, pqui::skinName (i), true, sk == i);
     if (logoutBtn.isVisible()) { m.addSeparator(); m.addItem (31, T8 ("Terminar sessão")); }
