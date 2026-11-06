@@ -627,6 +627,11 @@ int main()
         pe->setLayout (4); pe->setExpert (false); pe->resized(); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("layout_BC_simples.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
         pe->setExpert (true); pe->selectBand (1); pe->getGraph().tick(); pe->resized(); pqui::i18n::lang() = 1; pe->changeLanguage (1); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("layout_BC_en.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
         pe->changeLanguage (0); pqui::i18n::lang() = 0; pe->setSize (1100, 740); pe->resized(); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("layout_BC_min.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+        pe->setSize (1240, 860); pe->setLayout (4); pe->setExpert (false);
+        { const char* nmM[4] = { "cartao", "esq", "baixo", "dir" };
+          for (int m = 1; m < 4; ++m) { pe->setMeterPos (m); pe->resized(); p0->meterL.store (0.20f); p0->meterR.store (0.11f); pe->pumpMeter(); auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f (juce::String ("meter_") + nmM[m] + ".png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); CHECK (pe->getMeterPos() == m, "Medidor de saida na posicao %s", nmM[m]); }
+          pe->setMeterPos (3); pe->setExpert (true); pe->resized(); p0->meterL.store (0.20f); p0->meterR.store (0.11f); pe->pumpMeter(); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("meter_dir_expert.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+          pe->setMeterPos (0); }
         pe->setSize (1240, 860); pe->setLayout (0);
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);

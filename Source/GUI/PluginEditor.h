@@ -36,10 +36,36 @@ public:
         clip = now < clipUntil; repaint();
     }
     void mouseDown (const juce::MouseEvent&) override { clipUntil = 0; }
+    void setStyle (bool horizontal, bool withScale) { horiz = horizontal; scale = withScale; repaint(); }
     void paint (juce::Graphics& g) override
     {
         using namespace pqui;
         auto r = getLocalBounds().toFloat();
+        auto col = [] (float db) { return db > -1.f ? kRed : (db > -9.f ? kWarn : kTeal); };
+        if (horiz)   // duas barras (L por cima, R por baixo) com escala por baixo e CLIP na ponta direita
+        {
+            auto clipR = r.removeFromRight (40.f); r.removeFromRight (6.f);
+            const float labH = scale ? 11.f : 0.f; const float bh = (r.getHeight() - labH - 3.f) * 0.5f;
+            for (int c = 0; c < 2; ++c)
+            {
+                auto bar = juce::Rectangle<float> (r.getX(), r.getY() + (float) c * (bh + 3.f), r.getWidth(), bh);
+                g.setColour (kPanel2); g.fillRoundedRectangle (bar, 3.f);
+                const float db = juce::Decibels::gainToDecibels (lv[c], -90.f), t = juce::jlimit (0.f, 1.f, (db + 60.f) / 60.f);
+                g.setColour (col (db)); g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * t), 3.f);
+            }
+            if (scale)
+            {
+                g.setFont (fontOf (8.f)); g.setColour (kDim);
+                for (int d : { -48, -36, -24, -12, -6, 0 })
+                { const float x = r.getX() + r.getWidth() * (float) (d + 60) / 60.f; g.drawText (juce::String (d), juce::Rectangle<float> (x - 14.f, r.getBottom() - labH, 28.f, labH), juce::Justification::centred); g.fillRect (x, r.getY(), 1.f, 2.f * bh + 3.f); }
+            }
+            auto cb = clipR.withHeight (juce::jmin (clipR.getHeight(), 16.f)).withCentre (clipR.getCentre());
+            g.setColour (clip ? kRed : kPanel2); g.fillRoundedRectangle (cb, 3.f);
+            g.setColour (clip ? juce::Colours::white : kDim); g.setFont (fontOf (9.f, true)); g.drawText ("CLIP", cb, juce::Justification::centred);
+            return;
+        }
+        const float scW = scale ? 26.f : 0.f; auto barsR = r.withTrimmedRight (scW).withTrimmedTop (7.f);
+        r = barsR;
         for (int c = 0; c < 2; ++c)
         {
             auto bar = juce::Rectangle<float> (r.getX() + c * (r.getWidth() * 0.5f), r.getY(), r.getWidth() * 0.5f - 2.f, r.getHeight() - 12.f);
@@ -49,9 +75,16 @@ public:
             g.setColour (db > -1.f ? kRed : (db > -9.f ? kWarn : kTeal)); g.fillRoundedRectangle (fill, 3.f);
         }
         g.setColour (clip ? kRed : kPanel2); g.fillRoundedRectangle (r.getX(), r.getBottom() - 10.f, r.getWidth() - 2.f, 9.f, 3.f);
-        g.setColour (clip ? juce::Colours::white : kDim); g.setFont (fontOf (8.f, true)); g.drawText ("CLIP", getLocalBounds().removeFromBottom (10), juce::Justification::centred);
+        g.setColour (clip ? juce::Colours::white : kDim); g.setFont (fontOf (8.f, true)); g.drawText ("CLIP", getLocalBounds().removeFromBottom (10).withWidth ((int) r.getWidth()), juce::Justification::centred);
+        if (scale)
+        {
+            g.setFont (fontOf (8.f)); g.setColour (kDim);
+            for (int d : { 0, -6, -12, -24, -36, -48 })
+            { const float y = r.getY() + (r.getHeight() - 12.f) * (1.f - (float) (d + 60) / 60.f); g.drawText (juce::String (d), juce::Rectangle<float> (r.getRight() + 1.f, y - 5.f, scW, 10.f), juce::Justification::centredLeft); g.fillRect (r.getRight() - 3.f, y, 3.f, 1.f); }
+        }
     }
 private:
+    bool horiz = false, scale = false;
     PrimeqProcessor& proc; float lv[2] { 0.f, 0.f }; juce::uint32 clipUntil = 0; bool clip = false;
 };
 
@@ -216,9 +249,10 @@ public:
         autoB.setButtonText ("AUTO GAIN"); deltaB.setButtonText ("DELTA"); scB.setButtonText ("SIDECHAIN"); phB.setButtonText ("PEAK HOLD"); frB.setButtonText ("FREEZE");
         autoB.setTooltip (T8 ("Compensa o ganho médio da curva (40 Hz–14 kHz)")); deltaB.setTooltip (T8 ("Ouve só a diferença entre processado e original"));
     }
+    void setShowMeter (bool b) { showMeter = b; setPart (part); }
     void tick()
     {
-        meter.tick();
+        if (meter.isVisible()) meter.tick();   // so um medidor consome meterL/R de cada vez
         const double fs = proc.sampleRateNow(); const int lat = proc.currentLatency();
         info.setText (T8 ("Latencia ") + juce::String (lat) + " smp (" + juce::String (1000.0 * lat / fs, 1) + " ms)    CPU " + juce::String (proc.cpuLoad.load() * 100.f, 1) + " %" + (tsUsed() ? "    T/S " + juce::String ((int) std::lround (proc.transientNow() * 100.f)) + " %" : juce::String()), juce::dontSendNotification);
     }
@@ -226,7 +260,8 @@ public:
     void setPart (int p)
     {
         part = p; const bool o = part != 2, a = part != 1;
-        for (auto* c : std::initializer_list<juce::Component*> { &outK, &outL, &meter, &autoB, &deltaB, &scB }) c->setVisible (o);
+        for (auto* c : std::initializer_list<juce::Component*> { &outK, &outL, &autoB, &deltaB, &scB }) c->setVisible (o);
+        meter.setVisible (o && showMeter);
         for (auto* c : std::initializer_list<juce::Component*> { &phB, &frB, &fftC, &viewC, &tiltC, &rngC, &lFft, &lView, &lTilt, &lRng, &info }) c->setVisible (a);
         resized(); repaint();
     }
@@ -236,7 +271,7 @@ public:
         {
             auto r = getLocalBounds().reduced (12, 10);
             auto o = r.removeFromLeft (84); outL.setBounds (o.removeFromTop (14)); outK.setBounds (o); r.removeFromLeft (8);
-            meter.setBounds (r.removeFromLeft (30).reduced (0, 2)); r.removeFromLeft (12);
+            if (showMeter) { meter.setBounds (r.removeFromLeft (30).reduced (0, 2)); r.removeFromLeft (12); } else r.removeFromLeft (16);
             autoB.setBounds (r.removeFromTop (28)); r.removeFromTop (6); deltaB.setBounds (r.removeFromTop (28)); r.removeFromTop (6); scB.setBounds (r.removeFromTop (28));
             return;
         }
@@ -267,7 +302,7 @@ public:
         if (part == 2) { g.setColour (pqui::kDim); g.fillRoundedRectangle (0.f, 0.f, (float) getWidth(), 3.f, 1.5f); g.setColour (pqui::kText); g.setFont (pqui::fontOf (12.f, true)); g.drawText (pqui::T8 ("ANÁLISE · MEDIÇÃO"), 12, 8, getWidth() - 24, 20, juce::Justification::centredLeft); }
     }
 private:
-    int part = 0;
+    int part = 0; bool showMeter = true;
     bool tsUsed() const { for (int b = 0; b < pq::kNumBands; ++b) if (proc.getParamReal (juce::String (pq::bid (b, "ts"))) > 0.5f && proc.getParamReal (juce::String (pq::bid (b, "on"))) > 0.5f) return true; return false; }
     PrimeqProcessor& proc; LevelMeter meter;
     juce::Slider outK; juce::Label outL, info, lFft, lView, lTilt, lRng;
@@ -684,6 +719,10 @@ public:
     bool fxWanted() const { return layoutMode == 0 ? proc.uiMode != 0 : expertBtn.getToggleState(); }
     void setLayout (int m) { layoutMode = juce::jlimit (0, 4, m); layoutPref() = layoutMode; applyLayout(); }
     void applyLayout();
+    // posicao do medidor no modo B+C: 0 = cartao SAIDA, 1 = esquerda do espectro, 2 = por baixo, 3 = direita
+    void setMeterPos (int m);
+    int getMeterPos() const { return meterPos; }
+    void pumpMeter() { if (outMeter.isVisible()) outMeter.tick(); strip.tick(); }   // usado nos testes (sem timer)
     void updateBottom();   // visibilidade dos paineis inferiores (modo 4 = B + gaveta EXPERT)
     void setExpert (bool on) { expertBtn.setToggleState (on, juce::dontSendNotification); applyMode(); }
     int getLayoutMode() const { return layoutMode; }
@@ -763,7 +802,7 @@ private:
     PtGuard ptGuard;   // PRIMEIRO membro: forca PT durante a construcao para capturar os textos-fonte
     PrimeqProcessor& proc; pqui::Lnf lnf;
     EqGraph graph; BandPanel band, bandDyn; GlobalStrip strip, stripAn; FxPanel fx, fx2; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; pqui::MixMap3D map3d; pqui::VisualMixer vmix; LoginOverlay login; OnboardingOverlay guide;
-    juce::TextButton langBtn { "PT" }, skinBtn { "PRIME" }, toolsBtn { "FERRAMENTAS" }, layoutBtn { "LAYOUT" }; juce::ToggleButton expertBtn { "EXPERT" }; int layoutMode = 0;
+    juce::TextButton langBtn { "PT" }, skinBtn { "PRIME" }, toolsBtn { "FERRAMENTAS" }, layoutBtn { "LAYOUT" }; juce::ToggleButton expertBtn { "EXPERT" }; int layoutMode = 0; int meterPos = 0; LevelMeter outMeter; juce::TextButton meterBtn { "MEDIDOR" };
     juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
     juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "ZONAS" }, mapBtn { "MAPA 3D" }, vmixBtn { "MIXER" }, collBtn { "COLETIVO" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;
