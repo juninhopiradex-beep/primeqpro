@@ -577,6 +577,14 @@ public:
     void resized() override;
     EqGraph& getGraph() { return graph; }
     void selectBand (int b) { graph.select (b); }
+    // ---- pre-visualizacao de organizacao da GUI: 0 classico, 1 = A (cabecalho limpo + FERRAMENTAS + EXPERT), 2 = B (barra lateral), 3 = C (abas por cima da banda)
+    static int& layoutPref() { static int v = 0; return v; }
+    bool fxWanted() const { return layoutMode == 0 ? proc.uiMode != 0 : expertBtn.getToggleState(); }
+    void setLayout (int m) { layoutMode = juce::jlimit (0, 3, m); layoutPref() = layoutMode; applyLayout(); }
+    void applyLayout();
+    void setExpert (bool on) { expertBtn.setToggleState (on, juce::dontSendNotification); applyMode(); }
+    int getLayoutMode() const { return layoutMode; }
+    void toolsMenu();
     void updateOverlays() { graph.setVisible (! mix.isVisible() && ! map3d.isVisible() && ! vmix.isVisible()); }
     void showMap (bool s)
     {
@@ -594,7 +602,7 @@ public:
     }
     pqui::VisualMixer& getVisualMixer() { return vmix; }
     pqui::MixMap3D& getMap() { return map3d; }
-    void showMix (bool s) { if (s) { showMap (false); showMixer (false); } mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip }) c->setVisible (! s); fx.setVisible (! s && proc.uiMode != 0); if (s) { smart.setVisible (false); studio.setActive (false); studioBtn.setToggleState (false, juce::dontSendNotification); } else smart.setVisible (smartBtn.getToggleState()); resized(); }
+    void showMix (bool s) { if (s) { showMap (false); showMixer (false); } mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip }) c->setVisible (! s); fx.setVisible (! s && fxWanted()); if (s) { smart.setVisible (false); studio.setActive (false); studioBtn.setToggleState (false, juce::dontSendNotification); } else smart.setVisible (smartBtn.getToggleState()); resized(); }
     MixPanel& getMix() { return mix; }
     AbxPanel& getAbx() { return abx; }
     OnboardingOverlay& getGuide() { return guide; }
@@ -652,7 +660,7 @@ private:
     PtGuard ptGuard;   // PRIMEIRO membro: forca PT durante a construcao para capturar os textos-fonte
     PrimeqProcessor& proc; pqui::Lnf lnf;
     EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; pqui::MixMap3D map3d; pqui::VisualMixer vmix; LoginOverlay login; OnboardingOverlay guide;
-    juce::TextButton langBtn { "PT" }, skinBtn { "PRIME" };
+    juce::TextButton langBtn { "PT" }, skinBtn { "PRIME" }, toolsBtn { "FERRAMENTAS" }, layoutBtn { "LAYOUT" }; juce::ToggleButton expertBtn { "EXPERT" }; int layoutMode = 0;
     juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
     juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "ZONAS" }, mapBtn { "MAPA 3D" }, vmixBtn { "MIXER" }, collBtn { "COLETIVO" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;

@@ -611,6 +611,21 @@ int main()
         pe->changeLanguage (0); pqui::i18n::lang() = 0; pe->showMixer (false);
         { juce::MemoryBlock mb; ps[1]->getStateInformation (mb); auto q = make (48000.0, 512); q->setStateInformation (mb.getData(), (int) mb.getSize()); CHECK (std::fabs (q->getParamReal ("trk_width") - 150.f) < 0.2f, "Pan/Width guardados no estado do plugin"); }
     }
+    // 28) pre-visualizacao dos layouts A/B/C
+    {
+        auto p0 = make (48000.0, 512); p0->setTrackName ("Vocals", true); std::unique_ptr<juce::AudioProcessorEditor> ed (p0->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860);
+        const char* nmL[4] = { "classico", "A", "B", "C" };
+        { const auto& fp = PrimeqProcessor::factoryPresets(); for (size_t i = 0; i < fp.size(); ++i) if (juce::String (fp[i].name).containsIgnoreCase ("Vocal Presence")) { p0->loadFactoryPreset ((int) i); break; } }
+        { juce::Random rnd (7); juce::AudioBuffer<float> b (2, 512); juce::MidiBuffer mb; float lp = 0.f; for (int k = 0; k < 120; ++k) { for (int i = 0; i < 512; ++i) { lp += 0.12f * ((rnd.nextFloat() * 2.f - 1.f) - lp); const float v = 0.5f * lp * 4.f + 0.05f * (rnd.nextFloat() * 2.f - 1.f); b.setSample (0, i, v); b.setSample (1, i, v); } p0->processBlock (b, mb); pe->getGraph().tick(); } }
+        for (int L = 0; L < 4; ++L)
+        {
+            pe->setLayout (L); if (L > 0) { pe->setExpert (true); pe->resized(); }
+            auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f (juce::String ("layout_") + nmL[L] + ".png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo);
+            CHECK (im.getWidth() == 1240 && pe->getLayoutMode() == L, "Layout %s: snapshot gerado", nmL[L]);
+        }
+        pe->setLayout (1); pe->setExpert (false); { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("layout_A_simples.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+        pe->setLayout (0);
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }
