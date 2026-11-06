@@ -465,6 +465,56 @@ int main()
         pe->changeLanguage (0); CHECK (pqui::i18n::lang().load() == 0 && AccessManager::get().language() == 0, "i18n: voltar a PT");
         ed.reset();
     }
+    // 23) STUDIO: ABX por banda, cofre persistente, assinatura entre instancias, alvo/tradutor com medicao real, palavras, ficha
+    {
+        pqui::i18n::lang() = 0;
+        // ABX por banda: A = sem a banda (0 dB), B = com a banda (+9 dB), mesmo com BYPASS ligado
+        {
+            auto p = make (fs, bs); setBandP (*p, 0, "on", 1); setBandP (*p, 0, "freq", 1000); setBandP (*p, 0, "gain", 9); setBandP (*p, 0, "q", 1); setBandP (*p, 1, "on", 1); setBandP (*p, 1, "freq", 100); setBandP (*p, 1, "gain", 0); auto x = sine (1000, fs, 48000);
+            p->abxBand.store (0); p->abxSide.store (1); run (*p, x, bs); auto yA = run (*p, x, bs); const double gA = rmsDb (yA, 24000, 48000) - rmsDb (x, 24000, 48000);
+            setP (*p, "bypass", 1); p->abxSide.store (2); run (*p, x, bs); auto yB = run (*p, x, bs); const double gB = rmsDb (yB, 24000, 48000) - rmsDb (x, 24000, 48000);
+            CHECK (std::fabs (gA) < 0.3 && std::fabs (gB - 9.0) < 0.3, "ABX por banda: A sem a banda = %.2f dB, B com a banda = %.2f dB (BYPASS ligado nao interfere)", gA, gB);
+            CHECK (p->abxLvlDb[0].load() > -100.f && p->abxLvlDb[1].load() > p->abxLvlDb[0].load() + 6.f, "ABX por banda: processador mede o nivel dos dois lados (A %.1f dB, B %.1f dB)", p->abxLvlDb[0].load(), p->abxLvlDb[1].load());
+            p->abxSide.store (0); p->abxBand.store (-1);
+        }
+        // cofre + persistencia + restauro
+        {
+            auto p = make (fs, bs); p->loadFactoryPreset (0); setBandP (*p, 5, "on", 1); setBandP (*p, 5, "freq", 2222); p->logDecision ("cortei 250 Hz por masking com o baixo", "cut 250 Hz because of masking with the bass", "note");
+            const auto d0 = p->decisions(); CHECK (d0.size() >= 2 && d0.back().pt.find ("masking") != std::string::npos, "Cofre: preset e nota registados (%d entradas)", (int) d0.size());
+            p->customTargetSet (pq::studio::normalised (pq::studio::targetCurve (1, pq::studio::TargetAdjust())));
+            juce::MemoryBlock mb; p->getStateInformation (mb); auto q = make (fs, bs); q->setStateInformation (mb.getData(), (int) mb.getSize());
+            pq::studio::Curve cc; const auto d1 = q->decisions(); CHECK (d1.size() == d0.size() && d1.back().en.find ("bass") != std::string::npos && q->customTargetGet (cc), "Cofre: decisoes e alvo pessoal sobrevivem a gravar/carregar o estado (%d)", (int) d1.size());
+            setBandP (*q, 5, "freq", 4000); q->restoreDecision ((int) d1.size() - 1); CHECK (std::fabs (q->getBand (5).freq - 2222) < 1.0, "Cofre: restaurar volta ao estado desse momento (freq %.0f Hz)", q->getBand (5).freq);
+        }
+        // assinatura: bandas da pista A chegam a pista B pelo correio
+        {
+            auto a = make (fs, bs), b = make (fs, bs); setBandP (*a, 0, "on", 1); setBandP (*a, 0, "type", 3); setBandP (*a, 0, "freq", 90); setBandP (*a, 0, "slope", 3); setBandP (*a, 1, "on", 1); setBandP (*a, 1, "freq", 3100); setBandP (*a, 1, "gain", 2.5); setBandP (*a, 1, "q", 1.3);
+            pq::BandParams ab[pq::kNumBands]; a->readBands (ab); pq::MixMail m; m.props = pq::studio::toProposals (ab); m.undoName = "Assinatura"; pq::MixRegistry::get().post (b->mixSlot(), m); b->pollMixMail();
+            int hp = 0, pres = 0; for (int i = 0; i < pq::kNumBands; ++i) { const auto x = b->getBand (i); if (x.on && x.type == pq::BandType::HighPass && std::fabs (x.freq - 90) < 1 && x.slope == 3) ++hp; if (x.on && std::fabs (x.freq - 3100) < 1 && std::fabs (x.gain - 2.5) < 0.01) ++pres; }
+            CHECK (hp == 1 && pres == 1, "Assinatura: HP 90 Hz (declive preservado) e Bell 3,1 kHz chegam a outra pista");
+        }
+        // alvo e tradutor com medicao REAL (ruido rosa filtrado + sinal)
+        {
+            auto p = make (fs, bs); p->setAnalysing (true); std::vector<float> x (48000 * 6); unsigned st = 12345; double b0 = 0, b1 = 0, b2 = 0;
+            for (auto& v : x) { st = st * 1664525u + 1013904223u; const double w = ((st >> 8) / 8388608.0 - 1.0) * 0.5; b0 = 0.99765 * b0 + w * 0.0990460; b1 = 0.96300 * b1 + w * 0.2965164; b2 = 0.57000 * b2 + w * 1.0526913; v = (float) ((b0 + b1 + b2 + w * 0.1848) * 0.35); }
+            run (*p, x, bs, 1); juce::Thread::sleep (300); pq::studio::Curve c; const bool got = p->ownCurve (c); CHECK (got, "Studio: pista medida (28 bandas) apos ruido rosa");
+            const auto tr = pq::studio::translate (c, 0); CHECK (tr.ok && tr.retainedPct < 100.0, "Studio: tradutor sobre medicao real (%.0f%% audivel no telemovel)", tr.retainedPct);
+            const auto dv = pq::studio::compare (c, pq::studio::targetCurve (0, pq::studio::TargetAdjust())); CHECK (dv.ok && dv.rms < 8.0, "Studio: ruido rosa vs alvo neutro, desvio %.1f dB RMS", dv.rms);
+            auto ed = std::unique_ptr<juce::AudioProcessorEditor> (p->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); ed->setSize (1240, 860);
+            pe->showStudio (true); auto& S = pe->getStudio(); S.setTab (StudioPanel::TTarget); CHECK (S.isVisible() && S.deviation().ok && ! S.lines().empty(), "Painel STUDIO: aba ALVO mostra o desvio (%d linhas)", (int) S.lines().size());
+            { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_alvo.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+            S.setTab (StudioPanel::TTrans); CHECK (S.translation().ok, "Painel STUDIO: aba TRADUTOR calcula");
+            { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_tradutor.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+            S.setTab (StudioPanel::TWords); S.setWords ("menos lama e mais presen\xC3\xA7""a"); CHECK (S.pendingBands() >= 2, "Painel STUDIO: PALAVRAS interpreta (%d bandas)", S.pendingBands());
+            { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_palavras.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+            S.setTab (StudioPanel::TVault); { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_cofre.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+            S.setTab (StudioPanel::TTeach); { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_ensino.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+            const auto html = S.sheet(); CHECK (html.find ("<svg") != std::string::npos && html.size() > 3000, "Ficha: HTML gerado a partir do painel (%zu bytes)", html.size());
+            pqui::i18n::lang() = 1; pe->changeLanguage (1); S.setTab (StudioPanel::TTarget); { auto im = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f); juce::File f ("studio_alvo_en.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
+            pe->changeLanguage (0); pe->showStudio (false);
+            p->setTranslator (3); CHECK (p->translatorDevice() == 3, "Tradutor: monitorizacao ligada"); p->setTranslator (0);
+        }
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }

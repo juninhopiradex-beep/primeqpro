@@ -7,6 +7,7 @@
 #include "LookAndFeel.h"
 #include "../Plugin/PluginProcessor.h"
 #include "../SmartOps/Abx.h"
+#include "../SmartOps/Studio.h"
 
 class AbxPanel : public juce::Component, private juce::Timer
 {
@@ -21,10 +22,14 @@ public:
         for (auto* b : { &btA, &btB, &btX }) b->setClickingTogglesState (false);
         btA.onClick = [this] { listen (1); }; btB.onClick = [this] { listen (2); }; btX.onClick = [this] { listen (s.xIsBNow() ? 2 : 1, true); };
         isA.onClick = [this] { answer (false); }; isB.onClick = [this] { answer (true); }; restart.onClick = [this] { begin(); };
+        addAndMakeVisible (bandBox); bandBox.onChange = [this] { proc.abxBand.store (selectedBand()); if (isVisible()) begin(); }; fillBands();
         s.start (10, 1u); startTimerHz (10);       // NAO mexe no processador enquanto o painel esta escondido
     }
-    ~AbxPanel() override { proc.abxSide.store (0); proc.abxComp.store (1.f); }
-    void setActive (bool on) { setVisible (on); if (on) begin(); else { proc.abxSide.store (0); proc.abxComp.store (1.f); } }
+    ~AbxPanel() override { proc.abxSide.store (0); proc.abxComp.store (1.f); proc.abxBand.store (-1); }
+    void setActive (bool on) { setVisible (on); if (on) { fillBands(); proc.abxBand.store (selectedBand()); begin(); } else { proc.abxSide.store (0); proc.abxComp.store (1.f); proc.abxBand.store (-1); } }
+    int selectedBand() const { const int id = bandBox.getSelectedId(); return id >= 100 ? id - 100 : -1; }
+    void selectBand (int b) { bandBox.setSelectedId (b >= 0 ? 100 + b : 1, juce::sendNotification); }
+    void relabel() { fillBands(); refresh(); }
     // hooks para testes
     pq::AbxSession& session() { return s; }
     void listen (int side, bool isX = false) { proc.abxSide.store (side); onX = isX; heard = true; refresh(); }
@@ -53,6 +58,7 @@ public:
         auto r = getLocalBounds().reduced (16); r.removeFromTop (150);
         auto row = r.removeFromTop (34); const int w = (row.getWidth() - 20) / 3; btA.setBounds (row.removeFromLeft (w)); row.removeFromLeft (10); btB.setBounds (row.removeFromLeft (w)); row.removeFromLeft (10); btX.setBounds (row);
         r.removeFromTop (8); auto r2 = r.removeFromTop (30); isA.setBounds (r2.removeFromLeft (w)); r2.removeFromLeft (10); isB.setBounds (r2.removeFromLeft (w)); r2.removeFromLeft (10); restart.setBounds (r2);
+        bandBox.setBounds (16, 244, getWidth() - 32, 24);
         match.setBounds (getLocalBounds().reduced (16).removeFromBottom (48).removeFromTop (22));
     }
 private:
@@ -60,16 +66,30 @@ private:
     {
         if (! isVisible()) return;
         // compensacao: B (processado) ganha -delta para igualar o nivel; so quando ha sinal medido
-        const float d = proc.loudDeltaDb.load(); proc.abxComp.store (match.getToggleState() ? std::pow (10.f, -juce::jlimit (-12.f, 12.f, d) / 20.f) : 1.f);
+        if (selectedBand() >= 0)    // ABX por banda: A e B sao ambos processados; iguala-se o nivel B ao de A (medidos pelo processador)
+        {
+            const float la = proc.abxLvlDb[0].load(), lb = proc.abxLvlDb[1].load();
+            proc.abxComp.store ((match.getToggleState() && la > -100.f && lb > -100.f) ? std::pow (10.f, juce::jlimit (-9.f, 9.f, la - lb) / 20.f) : 1.f);
+        }
+        else { const float d = proc.loudDeltaDb.load(); proc.abxComp.store (match.getToggleState() ? std::pow (10.f, -juce::jlimit (-12.f, 12.f, d) / 20.f) : 1.f); }
         repaint();
     }
     void refresh()
     {
-        const bool fin = s.finished();
+        const bool fin = s.finished(); const bool bm = selectedBand() >= 0;
+        btA.setButtonText (bm ? pqui::T8 ("A  \xE2\x80\x94 sem a banda") : pqui::T8 ("A  \xE2\x80\x94 original")); btB.setButtonText (bm ? pqui::T8 ("B  \xE2\x80\x94 com a banda") : pqui::T8 ("B  \xE2\x80\x94 processado"));
         btA.setEnabled (! fin); btB.setEnabled (! fin); btX.setEnabled (! fin); isA.setEnabled (! fin && heard); isB.setEnabled (! fin && heard);
         const int side = proc.abxSide.load(); btA.setToggleState (! onX && side == 1, juce::dontSendNotification); btB.setToggleState (! onX && side == 2, juce::dontSendNotification); btX.setToggleState (onX, juce::dontSendNotification);
         repaint();
     }
+    void fillBands()
+    {
+        const int keep = bandBox.getSelectedId(); bandBox.clear (juce::dontSendNotification); bandBox.addItem (pqui::T8 ("Todas as bandas (original vs processado)"), 1);
+        pq::BandParams a[pq::kNumBands]; proc.readBands (a);
+        for (int i = 0; i < pq::kNumBands; ++i) if (a[i].on) bandBox.addItem (pqui::T8 ("Só a banda ") + juce::String (i + 1) + ":  " + juce::String (juce::CharPointer_UTF8 (pq::studio::bandSummary (a[i], pqui::i18n::isEn()).c_str())), 100 + i);
+        bandBox.setSelectedId (bandBox.indexOfItemId (keep) >= 0 ? keep : 1, juce::dontSendNotification);
+    }
+    juce::ComboBox bandBox;
     PrimeqProcessor& proc; pq::AbxSession s; bool heard = false, onX = false;
     juce::TextButton btA, btB, btX, isA, isB, restart; juce::ToggleButton match;
 };

@@ -166,6 +166,7 @@ void PrimeqProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     {
         const juce::ScopedLock sl (firLock);
         sr = sampleRate; maxBlock = std::max (1, samplesPerBlock);
+        { const juce::SpinLock::ScopedLockType xl (xfxLock); if (xlatDevice.load() > 0) xfx.setup (xlatDevice.load() - 1, sr); }
         core.prepare (sr);
         for (auto* v : { &dL, &dR, &sL, &sR }) v->assign ((size_t) kChunk, 0.0);
         for (int c = 0; c < 2; ++c) { fIn[c].assign ((size_t) kChunk, 0.f); fOut[c].assign ((size_t) kChunk, 0.f); dryRing[c].assign ((size_t) kDryCap, 0.f); }
@@ -278,11 +279,14 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     const int nch = std::min (2, getMainBusNumInputChannels());
     if (nch < 1 || total < 1) return;
 
-    BandParams bands[kNumBands]; readBands (bands); applyMorph (bands); core.setParams (bands);
+    BandParams bands[kNumBands]; readBands (bands); applyMorph (bands);
+    const int abxS = abxSide.load (std::memory_order_relaxed); const float abxC = abxComp.load (std::memory_order_relaxed);
+    const int abxBd = abxBand.load (std::memory_order_relaxed); const bool bandAbx = abxS != 0 && abxBd >= 0 && abxBd < kNumBands;
+    if (bandAbx && abxS == 1) bands[abxBd].on = false;      // ABX por banda: A = EQ sem a banda k; B = EQ completo
+    core.setParams (bands);
     core.setListen (listenBand.load (std::memory_order_relaxed));
     const int phaseIdx = std::clamp ((int) (pPhase->load() + 0.5f), 0, 2);
-    const int abxS = abxSide.load (std::memory_order_relaxed); const float abxC = abxComp.load (std::memory_order_relaxed);
-    const bool bypass = abxS == 1 ? true : (abxS == 2 ? false : pBypass->load() > 0.5f), delta = pDelta->load() > 0.5f, autoG = pAuto->load() > 0.5f;
+    const bool bypass = bandAbx ? false : (abxS == 1 ? true : (abxS == 2 ? false : pBypass->load() > 0.5f)), delta = pDelta->load() > 0.5f, autoG = pAuto->load() > 0.5f;
     Stage tgt; tgt.path = phaseIdx != 0 ? 1 : 0; tgt.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); tgt.dh = pDhOn->load() > 0.5f;
     const int chModeIdx = std::clamp ((int) (pChMode->load() + 0.5f), 0, 3);
     tgt.os = chModeIdx > 0 ? (1 << std::clamp ((int) (pChOs->load() + 0.5f), 0, 2)) : 0;
@@ -388,7 +392,7 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
                 double wL = delta ? (dL[(size_t) i] - dryL) * gainState : dL[(size_t) i] * gainState;
                 double wR = delta ? (dR[(size_t) i] - dryR) * gainState : dR[(size_t) i] * gainState;
                 wL = fadeGain * wL + (1.0 - fadeGain) * dryL; wR = fadeGain * wR + (1.0 - fadeGain) * dryR;
-                if (abxS != 0) { abxState += (abxC - abxState) * 0.002f; wL *= abxState; wR *= abxState; }
+                if (abxS != 0) { abxAcc += wL * wL + wR * wR; ++abxN; abxState += (abxC - abxState) * 0.002f; wL *= abxState; wR *= abxState; }
                 const float bt = bypass ? 1.f : 0.f; bypState += (bt - bypState) * bk; if (std::fabs (bt - bypState) < 1e-5f) bypState = bt;
                 if (std::fabs ((float) gTarget - gainState) < 1e-6f) gainState = (float) gTarget;
                 oLd = bypState * dryL + (1.0 - bypState) * wL; oRd = bypState * dryR + (1.0 - bypState) * wR;
@@ -399,12 +403,19 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             pkL = std::max (pkL, std::fabs ((float) oLd)); pkR = std::max (pkR, std::fabs ((float) oRd));
         }
         dryW = (dryW + m) & (kDryCap - 1);
+        if (abxS != 0 && abxN > 0) { const double e = abxAcc / (2.0 * abxN), k = 1.0 - std::exp (-(double) m / (1.5 * sr)); double& s = abxE[abxS - 1]; s += k * (e - s); abxLvlDb[abxS - 1].store ((float) (10.0 * std::log10 (std::max (1e-12, s))), std::memory_order_relaxed); }
+        abxAcc = 0; abxN = 0;
         analyzer.pushPost (oL.data(), oR.data(), m);
         {
             double sp = 0, so = 0; for (int i = 0; i < m; ++i) { sp += (double) pL[(size_t) i] * pL[(size_t) i] + (double) pR[(size_t) i] * pR[(size_t) i]; so += (double) oL[(size_t) i] * oL[(size_t) i] + (double) oR[(size_t) i] * oR[(size_t) i]; }
             const double k = 1.0 - std::exp (-(double) m / (1.5 * sr)); rmsPreE += k * (sp / m - rmsPreE); rmsPostE += k * (so / m - rmsPostE);
             if (rmsPreE > 1e-10 && rmsPostE > 1e-10) loudDeltaDb.store ((float) (10.0 * std::log10 (rmsPostE / rmsPreE)), std::memory_order_relaxed);
         }
+    }
+    if (xlatDevice.load (std::memory_order_relaxed) > 0)
+    {
+        const juce::SpinLock::ScopedTryLockType xl (xfxLock);
+        if (xl.isLocked()) xfx.process (buffer.getWritePointer (0), wr, total);
     }
     atomicMax (meterL, pkL); atomicMax (meterR, wr ? pkR : pkL);
     for (int b = 0; b < kNumBands; ++b) dynTel[(size_t) b].store ((float) core.dynDb (b), std::memory_order_relaxed);
@@ -418,7 +429,7 @@ void PrimeqProcessor::firDesignTick()
     const juce::ScopedLock sl (firLock);
     const int phaseIdx = std::clamp ((int) (pPhase->load() + 0.5f), 0, 2);
     if (phaseIdx == 0 || sr <= 0.0 || firFs.load() != (int) sr) return;
-    BandParams b[kNumBands]; readBands (b); applyMorph (b); double dyn[kNumBands];
+    BandParams b[kNumBands]; readBands (b); applyMorph (b); { const int ab = abxBand.load (std::memory_order_relaxed); if (abxSide.load (std::memory_order_relaxed) == 1 && ab >= 0 && ab < kNumBands) b[ab].on = false; } double dyn[kNumBands];
     for (int i = 0; i < kNumBands; ++i) dyn[i] = std::round (dynTel[(size_t) i].load (std::memory_order_relaxed) * 10.f) / 10.0;
     const double alpha = alphaFor ((PhaseMode) phaseIdx);
     std::vector<double> key; key.reserve (kNumBands * 12 + 3); key.push_back (alpha); key.push_back (sr);
@@ -469,6 +480,13 @@ void PrimeqProcessor::getStateInformation (juce::MemoryBlock& dest)
             root.addChildElement (e);
         }
     }
+    {
+        const juce::SpinLock::ScopedLockType l (decLock);
+        auto* ds = new juce::XmlElement ("DECISIONS");
+        for (const auto& d : decLog) { auto* e = new juce::XmlElement ("D"); e->setAttribute ("t", juce::String ((juce::int64) d.ms)); e->setAttribute ("pt", juce::String (juce::CharPointer_UTF8 (d.pt.c_str()))); e->setAttribute ("en", juce::String (juce::CharPointer_UTF8 (d.en.c_str()))); e->setAttribute ("k", juce::String (d.kind)); e->setAttribute ("b", juce::String (d.bands)); ds->addChildElement (e); }
+        if (hasCustom) { juce::String s; for (double v : customTarget) s << juce::String (v, 3) << ","; ds->setAttribute ("custom", s); }
+        root.addChildElement (ds);
+    }
     copyXmlToBinary (root, dest);
 }
 
@@ -487,6 +505,13 @@ void PrimeqProcessor::setStateInformation (const void* data, int size)
         uiWidth = std::clamp (xml->getIntAttribute ("uiW", uiWidth), 760, 3000); uiHeight = std::clamp (xml->getIntAttribute ("uiH", uiHeight), 480, 2000);
         slot = xml->getIntAttribute ("slot", 0) & 1; uiMode = std::clamp (xml->getIntAttribute ("mode", 1), 0, 2); pq::MixRegistry::get().setGroup (mixSlotId, xml->getIntAttribute ("mixGroup", 1));
         if (xml->hasAttribute ("mixName")) { auto& rg = pq::MixRegistry::get(); nameByUser = xml->getIntAttribute ("mixUser", 0) != 0; if (nameByUser) rg.setName (mixSlotId, xml->getStringAttribute ("mixName").toStdString()); rg.setPriority (mixSlotId, xml->getIntAttribute ("mixPri", 2)); rg.setAnalysing (mixSlotId, xml->getIntAttribute ("mixOn", 0) != 0, sr); }
+        if (auto* ds = xml->getChildByName ("DECISIONS"))
+        {
+            const juce::SpinLock::ScopedLockType l (decLock); decLog.clear();
+            for (auto* e : ds->getChildWithTagNameIterator ("D")) { pq::studio::Decision d; d.ms = e->getStringAttribute ("t").getLargeIntValue(); d.pt = e->getStringAttribute ("pt").toStdString(); d.en = e->getStringAttribute ("en").toStdString(); d.kind = e->getStringAttribute ("k").toStdString(); d.bands = e->getStringAttribute ("b").toStdString(); if (decLog.size() < 40) decLog.push_back (std::move (d)); }
+            hasCustom = false; const auto t = juce::StringArray::fromTokens (ds->getStringAttribute ("custom"), ",", "");
+            if (t.size() >= pq::kMixBands) { for (int b = 0; b < pq::kMixBands; ++b) customTarget[(size_t) b] = t[b].getDoubleValue(); hasCustom = true; }
+        }
         for (auto* e : xml->getChildWithTagNameIterator ("AB")) if (auto* c = e->getFirstChildElement()) slots[e->getIntAttribute ("i") & 1] = juce::ValueTree::fromXml (*c);
         {
             const juce::SpinLock::ScopedLockType l (morphLock); morphSet[0] = morphSet[1] = false;
@@ -590,6 +615,41 @@ void PrimeqProcessor::loadFactoryPreset (int idx)
 {
     const auto& v = factoryPresets(); if (idx < 0 || idx >= (int) v.size()) return;
     undo.beginNewTransaction (v[(size_t) idx].name); resetFx(); v[(size_t) idx].apply (*this);
+    logDecision (std::string ("Preset: ") + v[(size_t) idx].name, std::string ("Preset: ") + v[(size_t) idx].name, "preset");
+}
+
+// ------------------------------------------------------------------------------------------ STUDIO
+void PrimeqProcessor::setTranslator (int dev)
+{
+    const juce::SpinLock::ScopedLockType l (xfxLock);
+    if (dev > 0) xfx.setup (std::clamp (dev, 1, 5) - 1, sr);
+    xlatDevice.store (std::clamp (dev, 0, 5));
+}
+bool PrimeqProcessor::ownCurve (pq::studio::Curve& out, int minFrames) const
+{
+    out = pq::studio::emptyCurve(); if (mixSlotId < 0) return false;
+    std::vector<std::array<float, pq::kMixBands>> fr; pq::MixRegistry::get().copyFrames (mixSlotId, pq::kMixHist - 2, fr); if ((int) fr.size() < minFrames) return false;
+    int ok = 0;
+    for (int b = 0; b < pq::kMixBands; ++b)
+    {
+        std::vector<double> a; for (const auto& f : fr) if (f[(size_t) b] > -90.f) a.push_back (f[(size_t) b]);   // so quadros com sinal
+        if ((int) a.size() >= minFrames) { out[(size_t) b] = pq::percentileOf (a, 0.5); ++ok; }
+    }
+    return ok >= 12;
+}
+void PrimeqProcessor::logDecision (const std::string& pt, const std::string& en, const char* kind)
+{
+    BandParams cur[kNumBands]; readBands (cur);
+    pq::studio::Decision d; d.ms = juce::Time::currentTimeMillis(); d.pt = pt; d.en = en; d.kind = kind; d.bands = pq::studio::encodeBands (cur);
+    const juce::SpinLock::ScopedLockType l (decLock); decLog.push_back (std::move (d)); while (decLog.size() > 40) decLog.erase (decLog.begin());
+}
+bool PrimeqProcessor::restoreDecision (int i)
+{
+    pq::studio::Decision d; { const juce::SpinLock::ScopedLockType l (decLock); if (i < 0 || i >= (int) decLog.size()) return false; d = decLog[(size_t) i]; }
+    BandParams tgt[kNumBands]; pq::studio::decodeBands (d.bands, tgt);
+    undo.beginNewTransaction ("Cofre: restaurar");
+    for (int b = 0; b < kNumBands; ++b) { BandParams x = tgt[b]; if (! x.on) { BandParams cur = getBand (b); if (! cur.on) continue; x = cur; x.on = false; } setBand (b, x); }
+    return true;
 }
 
 // ------------------------------------------------------------------------------------------ Smart Ops (aplicar / reverter)
@@ -597,6 +657,7 @@ int PrimeqProcessor::smartApply (const std::vector<DeresProposal>& props, const 
 {
     undo.beginNewTransaction (undoName);
     smartBackup.clear(); smartScChanged = false; int created = 0, b = kNumBands - 1;
+    const std::string uname = undoName;
     BandParams cur[kNumBands]; readBands (cur);
     bool needSc = false;
     for (const auto& pr : props)
@@ -604,7 +665,7 @@ int PrimeqProcessor::smartApply (const std::vector<DeresProposal>& props, const 
         while (b >= 0 && cur[b].on) --b;
         if (b < 0) break;
         smartBackup.push_back ({ b, cur[b] });
-        BandParams p = cur[b]; p.on = true; p.type = (BandType) std::clamp (pr.type, 0, 7); p.freq = pr.freq; p.q = pr.q; p.place = (Placement) std::clamp (pr.place, 0, 4);
+        BandParams p = cur[b]; p.on = true; p.type = (BandType) std::clamp (pr.type, 0, 7); p.freq = pr.freq; p.q = pr.q; p.place = (Placement) std::clamp (pr.place, 0, 4); if (pr.slope >= 0) p.slope = std::clamp (pr.slope, 0, kNumSlopes - 1);
         if (pr.dynamic)
         {
             p.gain = 0.0; p.dyn = true; p.range = pr.gainDb; p.thr = pr.thrDb; p.ratio = pr.ratio; p.attackMs = pr.attackMs; p.releaseMs = pr.releaseMs;
@@ -618,6 +679,7 @@ int PrimeqProcessor::smartApply (const std::vector<DeresProposal>& props, const 
         smartScOld = getParamReal ("scext"); smartScChanged = smartScOld < 0.5f;
         if (smartScChanged) setParamReal ("scext", 1.f);
     }
+    if (created > 0) logDecision (uname + ": " + std::to_string (created) + " banda(s)", uname + ": " + std::to_string (created) + " band(s)", "smart");
     return created;
 }
 void PrimeqProcessor::smartRevert()

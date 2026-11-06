@@ -17,6 +17,7 @@
 #include "../DSP/Character.h"
 #include "../SmartOps/Morph.h"
 #include "../SmartOps/MixAnalysis.h"
+#include "../SmartOps/Studio.h"
 #include "MixRegistry.h"
 #include "../Analysis/AnalyzerEngine.h"
 #include "Access.h"
@@ -95,6 +96,22 @@ public:
     bool morphHas (int which) const { const juce::SpinLock::ScopedLockType l (morphLock); return morphSet[which & 1]; }
     void resetFx();                                                 // De-harsh, Character, lookahead e Morph para o padrao
 
+    // ---- STUDIO (alvo, tradutor, cofre de decisoes, ABX por banda) — ver SmartOps/Studio.h
+    std::atomic<float> abxLvlDb[2] { { -120.f }, { -120.f } };     // nivel RMS (dB) de cada lado do ABX, antes da compensacao
+    std::atomic<int> abxBand { -1 };                                // ABX por banda: -1 = ABX normal; k = A sem a banda k, B com a banda k
+    int  translatorDevice() const { return xlatDevice.load(); }     // 0 = desligado; 1..5 = telemovel, colunas, auriculares, carro, mono (so monitorizacao)
+    void setTranslator (int dev);                                   // thread de mensagens; nunca fica gravado no estado
+    bool ownCurve (pq::studio::Curve& out, int minFrames = 10) const;      // curva P50 desta pista (precisa de ANALISAR ligado); false sem dados
+    bool ownStats (pq::SpatialStats& out) const { if (mixSlotId < 0) return false; out = pq::MixRegistry::get().stats (mixSlotId); return true; }
+    void setAnalysing (bool on) { pq::MixRegistry::get().setAnalysing (mixSlotId, on, sr); }
+    bool analysing() const { return pq::MixRegistry::get().analysing (mixSlotId); }
+    void logDecision (const std::string& pt, const std::string& en, const char* kind);
+    std::vector<pq::studio::Decision> decisions() const { const juce::SpinLock::ScopedLockType l (decLock); return decLog; }
+    bool restoreDecision (int i);                                   // devolve ao estado das bandas desse momento (com undo)
+    void clearDecisions() { const juce::SpinLock::ScopedLockType l (decLock); decLog.clear(); }
+    void customTargetSet (const pq::studio::Curve& c) { const juce::SpinLock::ScopedLockType l (decLock); customTarget = c; hasCustom = true; }
+    bool customTargetGet (pq::studio::Curve& c) const { const juce::SpinLock::ScopedLockType l (decLock); c = customTarget; return hasCustom; }
+
     // ---- telemetria (lock-free)
     pq::AnalyzerEngine analyzer;
     std::array<std::atomic<float>, pq::kNumBands> dynTel {};
@@ -142,11 +159,15 @@ private:
     mutable juce::SpinLock morphLock; pq::BandParams morphA[pq::kNumBands], morphB[pq::kNumBands]; bool morphSet[2] { false, false };
     std::vector<float> scBuf[2];
 
+    std::atomic<int> xlatDevice { 0 }; pq::studio::MonitorFx xfx; juce::SpinLock xfxLock;
+    mutable juce::SpinLock decLock; std::vector<pq::studio::Decision> decLog; pq::studio::Curve customTarget = pq::studio::emptyCurve(); bool hasCustom = false;
+
     pq::EqCore core;
     double sr = 48000.0; int maxBlock = 512;
     static constexpr int kChunk = 256, kDryCap = 1 << 16;
     std::vector<double> dL, dR, sL, sR; std::vector<float> fIn[2], fOut[2], dryRing[2], oL, oR, pL, pR, fTmp;
     int dryW = 0, primeLeft = 0;
+    double abxAcc = 0; int abxN = 0; double abxE[2] { 0, 0 };
     float fadeGain = 1.f, fadeTarget = 1.f, bypState = 0.f, gainState = 1.f, agState = 0.f, abxState = 1.f; int path = 0;
 
     // FIR

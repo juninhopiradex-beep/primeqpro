@@ -22,6 +22,9 @@ public:
     std::vector<pq::DeresProposal> preview; bool showPreview = false;
     std::vector<OverlayZone> zones; bool showZones = true;       // zonas de masking/espaco vindas do Assistente
     void setZones (const std::vector<OverlayZone>& z) { zones = z; repaint(); }
+    // STUDIO: curva de desvio (pista - alvo, 28 bandas do Assistente) e zonas que o Tradutor diz desaparecerem
+    void setStudioOverlay (const std::array<double, pq::kMixBands>& dev, bool hasDev, const std::vector<std::pair<double, double>>& lost) { stDev = dev; stHasDev = hasDev; stLost = lost; repaint(); }
+    std::array<double, pq::kMixBands> stDev {}; bool stHasDev = false; std::vector<std::pair<double, double>> stLost;
 
     // chamado pelo timer do editor (thread de mensagens)
     void tick()
@@ -105,6 +108,24 @@ public:
                 g.setColour (c.withAlpha (0.55f)); g.drawVerticalLine ((int) x0, p.getY(), p.getBottom()); g.drawVerticalLine ((int) x1, p.getY(), p.getBottom());
                 if (z.label.isNotEmpty()) { g.setColour (c.brighter (0.4f).withAlpha (0.95f)); g.drawText (z.label, (int) x0 + 2, (int) p.getY() + 2, std::max (30, (int) (x1 - x0)), 12, juce::Justification::topLeft, false); }
             }
+        }
+
+        // STUDIO: zonas perdidas no Tradutor (laranja) e curva de desvio vs alvo (acima = ambar, abaixo = azul)
+        for (const auto& z : stLost)
+        {
+            const float x0 = juce::jlimit (p.getX(), p.getRight(), xOf (z.first * 0.93)), x1 = juce::jlimit (p.getX(), p.getRight(), xOf (z.second * 1.07)); if (x1 - x0 < 2.f) continue;
+            g.setColour (kWarn.withAlpha (0.16f)); g.fillRect (x0, p.getY(), x1 - x0, p.getHeight()); g.setColour (kWarn.withAlpha (0.7f)); g.setFont (fontOf (9.5f)); g.drawText (T8 ("PERDE-SE"), (int) x0 + 2, (int) p.getBottom() - 14, std::max (50, (int) (x1 - x0)), 12, juce::Justification::bottomLeft, false);
+        }
+        if (stHasDev)
+        {
+            juce::Path line, fill; bool st = false; float lx = 0.f;
+            for (int b = 0; b < pq::kMixBands; ++b)
+            {
+                const double v = stDev[(size_t) b]; if (v < -119.0 || v > 119.0) continue; const float x = xOf (pq::mixBandFreq (b)), y = yOf (juce::jlimit (-rangeDb, rangeDb, v));
+                if (! st) { line.startNewSubPath (x, y); fill.startNewSubPath (x, yOf (0.0)); fill.lineTo (x, y); st = true; } else { line.lineTo (x, y); fill.lineTo (x, y); } lx = x;
+            }
+            if (st) { fill.lineTo (lx, yOf (0.0)); fill.closeSubPath(); g.setColour (juce::Colour (0xffe0a458).withAlpha (0.16f)); g.fillPath (fill); g.setColour (juce::Colour (0xffe0a458).withAlpha (0.95f)); g.strokePath (line, juce::PathStrokeType (1.8f));
+                      g.setFont (fontOf (9.5f)); g.setColour (juce::Colour (0xffe0a458)); g.drawText (T8 ("ALVO: pista − alvo (acima = excesso)"), (int) p.getX() + 6, (int) p.getY() + 4, 320, 12, juce::Justification::topLeft, false); }
         }
 
         // curvas individuais (a partir dos coeficientes) e total

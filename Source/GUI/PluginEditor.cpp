@@ -4,7 +4,7 @@
 using namespace pqui;
 
 PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
-    : juce::AudioProcessorEditor (p), proc (p), graph (p), band (p), strip (p), fx (p), smart (p, graph), mix (p), abx (p),
+    : juce::AudioProcessorEditor (p), proc (p), graph (p), band (p), strip (p), fx (p), smart (p, graph), mix (p), abx (p), studio (p, graph),
       login ([this] { timerCallback(); })
 {
     if (AccessManager::get().pccConfigured()) juce::Thread::launch ([] { AccessManager::get().revalidatePcc(); });   // 1x/dia, em segundo plano
@@ -27,6 +27,7 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     addChildComponent (guide); guide.onClose = [] { AccessManager::get().setOnboardingSeen(); };
     addAndMakeVisible (langBtn); langBtn.onClick = [this] { setLanguage (pqui::i18n::lang().load() == 0 ? 1 : 0); };
     addAndMakeVisible (helpBtn); helpBtn.setTooltip (pqui::T8 ("Guia rápido")); helpBtn.onClick = [this] { guide.open(); resized(); };
+    addChildComponent (studio); addAndMakeVisible (studioBtn); studioBtn.setTooltip ("Alvo por gÃ©nero, Tradutor, Palavras, Cofre de decisÃµ""es e Ensino"); studioBtn.onClick = [this] { showStudio (studioBtn.getToggleState()); };
     addChildComponent (abx); addAndMakeVisible (abxBtn); abxBtn.setTooltip ("Teste ABX cego: original vs processado, loudness igualado"); abxBtn.onClick = [this] { showAbx (abxBtn.getToggleState()); };
     addAndMakeVisible (zonesBtn); zonesBtn.setToggleState (true, juce::dontSendNotification); zonesBtn.setTooltip (pqui::T8 ("Mostra no gráfico as zonas de masking e espaço detectadas pelo Assistente")); zonesBtn.onClick = [this] { graph.showZones = zonesBtn.getToggleState(); graph.repaint(); };
     addChildComponent (login); wasUnlocked = AccessManager::get().isUnlocked(); login.setVisible (! wasUnlocked); lastSel = 0; logoutBtn.setVisible (wasUnlocked && ! AccessManager::inTrial());
@@ -55,10 +56,10 @@ void PrimeqEditor::resized()
     auto r = getLocalBounds().reduced (10, 6);
     auto head = r.removeFromTop (38);
     head.removeFromLeft (220);
-    presetBtn.setBounds (head.removeFromLeft (170)); head.removeFromLeft (6);
+    presetBtn.setBounds (head.removeFromLeft (140)); head.removeFromLeft (6);
     undoBtn.setBounds (head.removeFromLeft (52)); head.removeFromLeft (4); redoBtn.setBounds (head.removeFromLeft (52)); head.removeFromLeft (6); abBtn.setBounds (head.removeFromLeft (38));
-    langBtn.setBounds (head.removeFromRight (40)); head.removeFromRight (6); logoutBtn.setBounds (head.removeFromRight (54)); head.removeFromRight (6); helpBtn.setBounds (head.removeFromRight (30)); head.removeFromRight (6); smartBtn.setBounds (head.removeFromRight (100)); head.removeFromRight (6); mixBtn.setBounds (head.removeFromRight (110)); head.removeFromRight (6); zonesBtn.setBounds (head.removeFromRight (74)); head.removeFromRight (6); abxBtn.setBounds (head.removeFromRight (56)); head.removeFromRight (6); modeBox.setBounds (head.removeFromRight (96)); head.removeFromRight (6); bypassBtn.setBounds (head.removeFromRight (84)); head.removeFromRight (10);
-    phaseBox.setBounds (head.removeFromRight (150)); phaseLbl.setBounds (head.removeFromRight (40));
+    langBtn.setBounds (head.removeFromRight (40)); head.removeFromRight (6); logoutBtn.setBounds (head.removeFromRight (54)); head.removeFromRight (6); helpBtn.setBounds (head.removeFromRight (30)); head.removeFromRight (6); smartBtn.setBounds (head.removeFromRight (88)); head.removeFromRight (4); studioBtn.setBounds (head.removeFromRight (78)); head.removeFromRight (4); mixBtn.setBounds (head.removeFromRight (96)); head.removeFromRight (4); zonesBtn.setBounds (head.removeFromRight (62)); head.removeFromRight (4); abxBtn.setBounds (head.removeFromRight (46)); head.removeFromRight (4); modeBox.setBounds (head.removeFromRight (84)); head.removeFromRight (4); bypassBtn.setBounds (head.removeFromRight (76)); head.removeFromRight (6);
+    phaseBox.setBounds (head.removeFromRight (110)); phaseLbl.setBounds (head.removeFromRight (34));
     r.removeFromTop (6);
     r.removeFromBottom (14);
     if (mix.isVisible()) { mix.setBounds (r); login.setBounds (getLocalBounds()); proc.uiWidth = getWidth(); proc.uiHeight = getHeight(); return; }
@@ -66,8 +67,9 @@ void PrimeqEditor::resized()
     if (fx.isVisible()) { fx.setBounds (r.removeFromBottom (92)); r.removeFromBottom (6); }
     band.setBounds (r.removeFromBottom (176)); r.removeFromBottom (6);
     if (smart.isVisible()) { smart.setBounds (r.removeFromRight (290)); r.removeFromRight (6); }
+    if (studio.isVisible()) { studio.setBounds (r.removeFromRight (360)); r.removeFromRight (6); }
     graph.setBounds (r);
-    abx.setBounds (r.getRight() - 470, r.getY() + 10, 460, 322); abx.toFront (false);
+    abx.setBounds (r.getRight() - 470, r.getY() + 10, 460, 352); abx.toFront (false);
     login.setBounds (getLocalBounds()); guide.setBounds (getLocalBounds()); if (guide.isVisible()) guide.toFront (false); else if (login.isVisible()) login.toFront (false);
     proc.uiWidth = getWidth(); proc.uiHeight = getHeight();
 }

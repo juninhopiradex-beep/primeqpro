@@ -9,6 +9,7 @@
 #include "../SmartOps/ReferenceMatch.h"
 #include "MixPanel.h"
 #include "AbxPanel.h"
+#include "StudioPanel.h"
 #include "Onboarding.h"
 
 using pqui::T8;
@@ -522,13 +523,15 @@ public:
     void resized() override;
     EqGraph& getGraph() { return graph; }
     void selectBand (int b) { graph.select (b); }
-    void showMix (bool s) { mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip }) c->setVisible (! s); fx.setVisible (! s && proc.uiMode != 0); if (s) smart.setVisible (false); else smart.setVisible (smartBtn.getToggleState()); resized(); }
+    void showMix (bool s) { mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip }) c->setVisible (! s); fx.setVisible (! s && proc.uiMode != 0); if (s) { smart.setVisible (false); studio.setActive (false); studioBtn.setToggleState (false, juce::dontSendNotification); } else smart.setVisible (smartBtn.getToggleState()); resized(); }
     MixPanel& getMix() { return mix; }
     AbxPanel& getAbx() { return abx; }
     OnboardingOverlay& getGuide() { return guide; }
     void changeLanguage (int l) { setLanguage (l); }
     void showAbx (bool s) { abxBtn.setToggleState (s, juce::dontSendNotification); abx.setActive (s); resized(); }
-    void showSmart (bool s) { smartBtn.setToggleState (s, juce::dontSendNotification); smart.setVisible (s && ! mix.isVisible()); resized(); }
+    void showSmart (bool s) { smartBtn.setToggleState (s, juce::dontSendNotification); smart.setVisible (s && ! mix.isVisible()); if (s) { studioBtn.setToggleState (false, juce::dontSendNotification); studio.setActive (false); } resized(); }
+    void showStudio (bool s) { studioBtn.setToggleState (s, juce::dontSendNotification); studio.setActive (s && ! mix.isVisible()); if (s) { smartBtn.setToggleState (false, juce::dontSendNotification); smart.setVisible (false); } resized(); }
+    StudioPanel& getStudio() { return studio; }
 private:
     void timerCallback() override;
     void applyMode();
@@ -552,7 +555,7 @@ private:
     void captureLanguage() { captureRec (*this); }
     void applyLanguage()
     {
-        applyRec (*this);
+        applyRec (*this); abx.relabel(); studio.refreshLanguage();
         abBtn.setButtonText (proc.abSlot() == 0 ? "A" : "B"); presetBtn.setButtonText (presetName);
         langBtn.setButtonText (pqui::i18n::lang().load() == 0 ? "PT" : "EN"); langBtn.setTooltip (pqui::i18n::lang().load() == 0 ? "Idioma: Português (clique para English)" : "Language: English (click for Português)");
         mix.relabel(); login.refreshLanguage(); smart.refreshLanguage(); timerCallback(); repaint();
@@ -561,10 +564,10 @@ private:
     void presetMenu();
     PtGuard ptGuard;   // PRIMEIRO membro: forca PT durante a construcao para capturar os textos-fonte
     PrimeqProcessor& proc; pqui::Lnf lnf;
-    EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; AbxPanel abx; LoginOverlay login; OnboardingOverlay guide;
+    EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; LoginOverlay login; OnboardingOverlay guide;
     juce::TextButton langBtn { "PT" };
     juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
-    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, zonesBtn { "ZONAS" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
+    juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "ZONAS" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;
     juce::String presetName { "Init (Flat)" }; bool wasUnlocked = true; int lastSel = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrimeqEditor)

@@ -18,6 +18,7 @@
 #include "../../Source/SmartOps/Consequence.h"
 #include "../../Source/Shared/Units.h"
 #include "../../Source/SmartOps/Abx.h"
+#include "../../Source/SmartOps/Studio.h"
 #include <chrono>
 #include <cstdio>
 #include <random>
@@ -537,6 +538,45 @@ int main()
         }
         std::printf ("INFO    Cramping Bell 44.1/48k: pior desvio RBJ %.2f dB -> matched %.2f dB (tipico f0<=10k,Q>=2: %.2f dB)\n", wR, wM, typ);
         CHECK (fin && wM < wR * 0.5 && wM < 3.0, "Bell matched: desvio ao prototipo analogico reduzido a menos de metade do RBJ (%.2f vs %.2f dB), sempre finito", wM, wR);
+    }
+    // ---- STUDIO (alvos, tradutor, cofre, presets, palavras, ensino, ficha)
+    {
+        using namespace pq::studio;
+        // alvos: curva do proprio genero => desvio ~0; pista com +4 dB nos graves => regiao grave +4
+        Curve tg = targetCurve (1, TargetAdjust()); CHECK (compare (tg, tg).ok && compare (tg, tg).rms < 1e-9, "Studio: pista igual ao alvo => desvio 0");
+        Curve m = tg; for (int b = 0; b < pq::kMixBands; ++b) if (pq::mixBandFreq (b) < 200) m[(size_t) b] += 4.0;
+        const auto dv = compare (m, tg); CHECK (dv.ok && dv.region[0] > 2.5 && std::fabs (dv.region[2]) < 1.0, "Studio: graves +4 dB detetados (regiao grave %+.1f, medios %+.1f)", dv.region[0], dv.region[2]);
+        const auto pr = proposeToTarget (m, tg, 0.8, 6, 6.0); bool cut = false; for (auto& p : pr) if (p.freq < 400 && p.gainDb < -1.0) cut = true;
+        CHECK (! pr.empty() && cut, "Studio: proposta corta os graves em excesso (%d bandas)", (int) pr.size());
+        Curve flat = emptyCurve(); for (int b = 0; b < pq::kMixBands; ++b) flat[(size_t) b] = -30.0; CHECK (compare (flat, flat).linesPt.size() == 1, "Studio: sem desvio => 1 linha 'tudo ok'");
+        bool genresOk = genres().size() >= 10; for (size_t g = 0; g < genres().size(); ++g) { const Curve c = targetCurve ((int) g, TargetAdjust()); for (double v : c) if (! std::isfinite (v)) genresOk = false; }
+        CHECK (genresOk, "Studio: %d generos com curvas finitas", (int) genres().size());
+        { Curve a = targetCurve (0, TargetAdjust()), b2 = targetCurve (0, TargetAdjust { 0, 3, 0, 0 }); CHECK (b2[0] - a[0] > 2.0 && std::fabs (b2[20] - a[20]) < 0.2, "Studio: ajuste de graves +3 dB sobe so o grave (%.2f vs %.2f dB)", b2[0] - a[0], b2[20] - a[20]); }
+        // tradutor: pista cheia => telemovel perde graves/low-mid; mono sem stats => nada perdido
+        Curve full; for (int b = 0; b < pq::kMixBands; ++b) full[(size_t) b] = -20.0 - 1.5 * std::log2 (pq::mixBandFreq (b) / 100.0);
+        const auto ph = translate (full, 0); int lostLow = 0, lostHigh = 0; for (int b = 0; b < pq::kMixBands; ++b) { if (ph.status[(size_t) b] == 2) { if (pq::mixBandFreq (b) < 300) ++lostLow; else if (pq::mixBandFreq (b) > 1000) ++lostHigh; } }
+        CHECK (ph.ok && lostLow >= 2 && lostHigh == 0 && ph.retainedPct < 100.0, "Studio: telemovel => desaparecem graves (%d bandas < 300 Hz), agudos intactos; %.0f%% audivel", lostLow, ph.retainedPct);
+        CHECK (translate (full, 4).retainedPct > 99.0, "Studio: mono sem perda de fase => 100%% audivel");
+        CHECK (! translate (emptyCurve(), 0).ok, "Studio: sem medicao => tradutor nao inventa");
+        { MonitorFx fx; fx.setup (0, 48000.0); std::vector<float> l (48000), r (48000); for (size_t i = 0; i < l.size(); ++i) { l[i] = 0.5f * std::sin (2.0 * M_PI * 100.0 * i / 48000.0); r[i] = l[i]; }
+          fx.process (l.data(), r.data(), (int) l.size()); double e = 0; for (size_t i = 24000; i < l.size(); ++i) e += l[i] * l[i]; e = std::sqrt (e / 24000.0) / (0.5 / std::sqrt (2.0));
+          CHECK (e < 0.1 && std::isfinite (e), "Studio: filtro do telemovel atenua 100 Hz em %.1f dB", 20 * std::log10 (std::max (1e-9, e))); }
+        // cofre: codificar/descodificar bandas
+        { pq::BandParams a[pq::kNumBands], b[pq::kNumBands]; a[3].on = true; a[3].type = pq::BandType::HighPass; a[3].freq = 80; a[3].slope = 3; a[7].on = true; a[7].freq = 3333.5; a[7].gain = -2.5; a[7].q = 1.7; a[7].dyn = true; a[7].range = -4; a[7].thr = -31;
+          decodeBands (encodeBands (a), b); CHECK (b[3].on && b[3].type == pq::BandType::HighPass && b[3].slope == 3 && b[7].dyn && std::fabs (b[7].freq - 3333.5) < 1e-3 && std::fabs (b[7].thr + 31) < 1e-3 && ! b[0].on, "Studio: cofre — bandas codificam/descodificam sem perdas");
+          const auto pp = toProposals (a); CHECK (pp.size() == 2 && pp[0].slope == 3 && pp[1].dynamic, "Studio: assinatura -> propostas (%d)", (int) pp.size());
+          SheetData sd; sd.track = "Voz <1>"; sd.date = "2026-11-06"; for (int i = 0; i < pq::kNumBands; ++i) sd.now[i] = a[i]; sd.decisions.push_back ({ 0, "cortei 250 Hz", "cut 250 Hz", "x", "" });
+          const auto h = sheetHtml (sd); CHECK (h.find ("Voz &lt;1&gt;") != std::string::npos && h.find ("cut 250 Hz") != std::string::npos && h.find ("cortei 250 Hz") != std::string::npos && h.find ("<svg") != std::string::npos, "Studio: ficha HTML bilingue com SVG e escape de HTML (%zu bytes)", h.size()); }
+        // sugestao de preset: pista com low-mid em excesso => preset sugerido reduz o erro
+        { Curve mm = tg; for (int b = 0; b < pq::kMixBands; ++b) { const double f = pq::mixBandFreq (b); if (f >= 200 && f <= 450) mm[(size_t) b] += 5.0; }
+          const auto dd = compare (mm, tg); const auto pk = rankPresets (dd, 3); CHECK (! pk.empty() && pk[0].errAfter < pk[0].errBefore - 0.3, "Studio: preset sugerido '%s' reduz o desvio %.2f -> %.2f dB", pk.empty() ? "-" : pk[0].name.c_str(), pk.empty() ? 0.0 : pk[0].errBefore, pk.empty() ? 0.0 : pk[0].errAfter); }
+        // palavras
+        { const auto w = planWords ("menos lama, mais presen\xC3\xA7""a e mais brilho", 0.5); bool mud = false, pres = false, air = false; for (auto& p : w.props) { if (p.freq < 400 && p.gainDb < 0) mud = true; if (p.freq > 2500 && p.freq < 4000 && p.gainDb > 0) pres = true; if (p.freq > 8000 && p.gainDb > 0) air = true; }
+          CHECK (mud && pres && air && w.recognised.size() == 3 && w.unknown.empty(), "Studio: palavras PT -> lama(-) presenca(+) brilho(+) (%d bandas)", (int) w.props.size());
+          const auto e = planWords ("less harsh and more warmth", 0.5); CHECK (e.recognised.size() == 2 && ! e.props.empty(), "Studio: palavras EN reconhecidas (%d)", (int) e.recognised.size());
+          const auto u = planWords ("xpto qualquer", 0.5); CHECK (u.props.empty() && u.unknown.size() == 1, "Studio: texto desconhecido nao inventa bandas"); }
+        // ensino
+        { pq::BandParams b; b.on = true; b.freq = 300; b.gain = -3; const auto pt = explainBand (b, false), en = explainBand (b, true); CHECK (pt.find ("lama") != std::string::npos && en.find ("mud") != std::string::npos, "Studio: explicacao PT/EN da banda 300 Hz"); }
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
