@@ -447,7 +447,7 @@ int main()
     }
     // 21) onboarding: 6 passos, fecha no fim e avisa (para gravar "visto")
     {
-        OnboardingOverlay o; o.setSize (1000, 700); bool closed = false; o.onClose = [&] { closed = true; };
+        pqui::i18n::lang() = 0; OnboardingOverlay o; o.setSize (1000, 700); bool closed = false; o.onClose = [&] { closed = true; };
         o.open(); CHECK (o.isVisible() && o.pages() == 6, "Onboarding: abre com %d passos", o.pages());
         for (int i = 0; i < o.pages(); ++i) { o.gotoPage (i); if (i == 0 || i == 3) { auto im = o.createComponentSnapshot (o.getLocalBounds(), true, 1.0f); juce::File f (juce::String ("onboarding_") + juce::String (i + 1) + ".png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); } }
         o.gotoPage (5); { int nb = 0; for (auto* c : o.getChildren()) if (auto* b = dynamic_cast<juce::TextButton*> (c)) { ++nb; if (b->getButtonText().startsWith ("Come") && b->onClick) b->onClick(); } (void) nb; }

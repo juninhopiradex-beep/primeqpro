@@ -1,4 +1,7 @@
 # Changelog
+## 1.5.0
+- Novo: idioma Português / English. Botão PT/EN no topo; troca imediata e guardada. Sem escolha, segue o idioma do sistema.
+- Traduzidos: menus, botões, dicas, guia inicial, teste ABX, Assistente (rótulos). As frases de diagnóstico geradas pelo Assistente e o relatório exportado continuam em português nesta versão.
 ## 1.4.1
 - CORRECÇÃO: o PRIMEQ PRO tinha o mesmo código de plugin (PxEQ) que o EQMotion, por isso a DAW (Studio One) escondia um deles. Novo código: PxPQ (VST3 CID e AU únicos). Sessões antigas que usavam o PRIMEQ PRO precisam de o inserir de novo.
 ## 1.4.0
