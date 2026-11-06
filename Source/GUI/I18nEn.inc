@@ -141,6 +141,8 @@
 { "INTENÇÃO", "INTENT" },
 { "CENÁRIOS", "SCENARIOS" },
 { "DINÂMICA", "DYNAMIC" },
+{ "CARÁCTER · T/S", "CHARACTER · T/S" },
+{ "ANÁLISE · MEDIÇÃO", "ANALYSIS · METERING" },
 { "Masking restante", "Remaining masking" },
 { "Nível da pista (RMS)", "Track level (RMS)" },
 { "Nível da soma (RMS)", "Sum level (RMS)" },

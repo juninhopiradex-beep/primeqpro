@@ -4,12 +4,12 @@
 using namespace pqui;
 
 PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
-    : juce::AudioProcessorEditor (p), proc (p), graph (p), band (p), strip (p), fx (p), smart (p, graph), mix (p), abx (p), studio (p, graph), map3d (p), vmix (p),
+    : juce::AudioProcessorEditor (p), proc (p), graph (p), band (p), bandDyn (p), strip (p), stripAn (p), fx (p), fx2 (p), smart (p, graph), mix (p), abx (p), studio (p, graph), map3d (p), vmix (p),
       login ([this] { timerCallback(); })
 {
     if (AccessManager::get().pccConfigured()) juce::Thread::launch ([] { AccessManager::get().revalidatePcc(); });   // 1x/dia, em segundo plano
     openEditors().push_back (this); setLookAndFeel (&lnf);
-    addAndMakeVisible (graph); addAndMakeVisible (band); addAndMakeVisible (strip); addAndMakeVisible (fx); addChildComponent (smart); addChildComponent (mix); addAndMakeVisible (mixBtn); addAndMakeVisible (modeBox); modeBox.addItem ("Simple", 1); modeBox.addItem ("Advanced", 2); modeBox.addItem ("Expert", 3); modeBox.setSelectedId (proc.uiMode + 1, juce::dontSendNotification); modeBox.onChange = [this] { proc.uiMode = modeBox.getSelectedId() - 1; applyMode(); }; modeBox.setTooltip (pqui::T8 ("Simple: essencial · Advanced: tudo · Expert: + cenários e relatório"));
+    addAndMakeVisible (graph); addAndMakeVisible (band); addAndMakeVisible (strip); addAndMakeVisible (fx); addChildComponent (bandDyn); addChildComponent (stripAn); addChildComponent (fx2); bandDyn.setPart (2); stripAn.setPart (2); fx2.setPart (2); addChildComponent (smart); addChildComponent (mix); addAndMakeVisible (mixBtn); addAndMakeVisible (modeBox); modeBox.addItem ("Simple", 1); modeBox.addItem ("Advanced", 2); modeBox.addItem ("Expert", 3); modeBox.setSelectedId (proc.uiMode + 1, juce::dontSendNotification); modeBox.onChange = [this] { proc.uiMode = modeBox.getSelectedId() - 1; applyMode(); }; modeBox.setTooltip (pqui::T8 ("Simple: essencial · Advanced: tudo · Expert: + cenários e relatório"));
     for (auto* b : { &presetBtn, &undoBtn, &redoBtn, &abBtn, &logoutBtn }) addAndMakeVisible (b);
     addAndMakeVisible (bypassBtn); addAndMakeVisible (smartBtn); addAndMakeVisible (phaseBox); addAndMakeVisible (phaseLbl);
     if (auto* pc = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter ("phase"))) phaseBox.addItemList (pc->choices, 1);
@@ -27,7 +27,7 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     addChildComponent (vmix); vmix.onClose = [this] { showMixer (false); };
     addAndMakeVisible (vmixBtn); vmixBtn.setTooltip (pqui::T8 ("Visual Mixer: arrasta cada pista no plano pan (X) e ganho (Y); as pontas alteram a largura. Snapshots A/B/C e Balance Assistant")); vmixBtn.onClick = [this] { showMixer (vmixBtn.getToggleState()); };
     addAndMakeVisible (collBtn); collBtn.setTooltip (pqui::T8 ("Sobrepõe no gráfico as curvas das outras pistas analisadas (nível relativo) e as bandas em choque")); collBtn.onClick = [this] { graph.setCollective (collBtn.getToggleState()); };
-    graph.onSelect = [this] (int b) { band.bind (b); };
+    graph.onSelect = [this] (int b) { band.bind (b); bandDyn.bind (b); };
     mix.onZones = [this] (const std::vector<OverlayZone>& z) { graph.setZones (z); zonesBtn.setVisible (! z.empty() || true); };
     addChildComponent (guide); guide.onClose = [] { AccessManager::get().setOnboardingSeen(); };
     addAndMakeVisible (skinBtn); skinBtn.setButtonText (pqui::skinName (shownSkin)); skinBtn.setTooltip (juce::String (juce::CharPointer_UTF8 ("Cor / skin: Prime, Ouro, \xC3\x8D""ndigo (seguro para daltonismo)")));
@@ -39,7 +39,7 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     addAndMakeVisible (zonesBtn); zonesBtn.setToggleState (true, juce::dontSendNotification); zonesBtn.setTooltip (pqui::T8 ("Mostra no gráfico as zonas de masking e espaço detectadas pelo Assistente")); zonesBtn.onClick = [this] { graph.showZones = zonesBtn.getToggleState(); graph.repaint(); };
     addChildComponent (toolsBtn); toolsBtn.onClick = [this] { toolsMenu(); };
     addChildComponent (expertBtn); expertBtn.setClickingTogglesState (true); expertBtn.setTooltip (pqui::T8 ("EXPERT: mostra De-harsh, Carácter, Oversampling, Lookahead e T/S")); expertBtn.onClick = [this] { applyMode(); };
-    addAndMakeVisible (layoutBtn); layoutBtn.setTooltip ("Pre-visualizacao da organizacao: Classico, A, B, C"); layoutBtn.onClick = [this] { setLayout ((layoutMode + 1) % 4); };
+    addAndMakeVisible (layoutBtn); layoutBtn.setTooltip ("Pre-visualizacao da organizacao: Classico, A, B, C, B+C"); layoutBtn.onClick = [this] { setLayout ((layoutMode + 1) % 5); };
     addChildComponent (login); wasUnlocked = AccessManager::get().isUnlocked(); login.setVisible (! wasUnlocked); lastSel = 0; logoutBtn.setVisible (wasUnlocked && ! AccessManager::inTrial());
     layoutMode = layoutPref(); applyLayout();
     captureLanguage(); pqui::i18n::forcePt() = false;
@@ -86,12 +86,24 @@ void PrimeqEditor::resized()
     r.removeFromTop (6);
     r.removeFromBottom (14);
     std::array<juce::Component*, 8> tl { &smartBtn, &studioBtn, &mixBtn, &vmixBtn, &mapBtn, &collBtn, &zonesBtn, &abxBtn };
-    if (layoutMode == 2) { auto rail = r.removeFromLeft (112); r.removeFromLeft (8); for (auto* c : tl) { c->setBounds (rail.removeFromTop (40)); rail.removeFromTop (6); } }
+    if (layoutMode == 2 || layoutMode == 4) { auto rail = r.removeFromLeft (112); r.removeFromLeft (8); for (auto* c : tl) { c->setBounds (rail.removeFromTop (40)); rail.removeFromTop (6); } }
     auto placeTabs = [&] (juce::Rectangle<int> row) { const int n = (int) tl.size(); for (int i = 0; i < n; ++i) tl[(size_t) i]->setBounds (row.getX() + row.getWidth() * i / n + 2, row.getY(), row.getWidth() / n - 4, row.getHeight()); };
     if (mix.isVisible()) { if (layoutMode == 3) { placeTabs (r.removeFromBottom (32)); r.removeFromBottom (6); } mix.setBounds (r); login.setBounds (getLocalBounds()); proc.uiWidth = getWidth(); proc.uiHeight = getHeight(); return; }
+    if (layoutMode == 4)
+    {
+        if (fxWanted())
+        {
+            auto dr = r.removeFromBottom (200); r.removeFromBottom (6); const int cw = (dr.getWidth() - 3 * 6) / 4;
+            for (auto* c : std::initializer_list<juce::Component*> { &bandDyn, &fx, &fx2, &stripAn }) { c->setBounds (dr.removeFromLeft (cw)); dr.removeFromLeft (6); }
+        }
+        auto row = r.removeFromBottom (150); r.removeFromBottom (6); strip.setBounds (row.removeFromRight (300)); row.removeFromRight (6); band.setBounds (row);
+    }
+    else
+    {
     strip.setBounds (r.removeFromBottom (70)); r.removeFromBottom (6);
     if (fx.isVisible()) { fx.setBounds (r.removeFromBottom (92)); r.removeFromBottom (6); }
     band.setBounds (r.removeFromBottom (176)); r.removeFromBottom (6);
+    }
     if (layoutMode == 3) { placeTabs (r.removeFromBottom (32)); r.removeFromBottom (6); }
     if (smart.isVisible()) { smart.setBounds (r.removeFromRight (290)); r.removeFromRight (6); }
     if (studio.isVisible()) { studio.setBounds (r.removeFromRight (360)); r.removeFromRight (6); }
@@ -105,7 +117,13 @@ void PrimeqEditor::applyMode()
 {
     const bool simple = proc.uiMode == 0;
     if (layoutMode == 0) { smartBtn.setVisible (! simple); if (simple) { smart.setVisible (false); smartBtn.setToggleState (false, juce::dontSendNotification); } }
-    fx.setVisible (fxWanted() && ! mix.isVisible()); resized();
+    updateBottom(); resized();
+}
+
+void PrimeqEditor::updateBottom()
+{
+    const bool m = ! mix.isVisible(), c = layoutMode == 4, fxv = m && fxWanted();
+    band.setVisible (m); strip.setVisible (m); fx.setVisible (fxv); fx2.setVisible (fxv && c); bandDyn.setVisible (fxv && c); stripAn.setVisible (fxv && c);
 }
 
 void PrimeqEditor::applyLayout()
@@ -114,7 +132,8 @@ void PrimeqEditor::applyLayout()
     for (auto* t : std::initializer_list<juce::Button*> { &studioBtn, &mixBtn, &vmixBtn, &mapBtn, &collBtn, &zonesBtn, &abxBtn }) t->setVisible (layoutMode != 1);
     smartBtn.setVisible (layoutMode == 0 ? ! simple : layoutMode >= 2);
     toolsBtn.setVisible (layoutMode == 1); expertBtn.setVisible (layoutMode != 0); modeBox.setVisible (layoutMode == 0);
-    static const char* nm[4] = { "CLASSICO", "LAYOUT A", "LAYOUT B", "LAYOUT C" }; layoutBtn.setButtonText (nm[layoutMode]);
+    static const char* nm[5] = { "CLASSICO", "LAYOUT A", "LAYOUT B", "LAYOUT C", "B + C" }; layoutBtn.setButtonText (nm[layoutMode]);
+    { const int pt = layoutMode == 4 ? 1 : 0; band.setPart (pt); strip.setPart (pt); fx.setPart (pt); }
     applyMode();
 }
 
@@ -133,7 +152,7 @@ void PrimeqEditor::timerCallback()
     if (unlocked && ! login.isVisible() && ! guide.isVisible() && ! AccessManager::get().onboardingSeen()) { guide.open(); resized(); }
     if (unlocked != wasUnlocked || lastSel < 0) { wasUnlocked = unlocked; login.setVisible (! unlocked); logoutBtn.setVisible (unlocked && ! AccessManager::inTrial()); login.toFront (false); repaint(); lastSel = 0; }
     if (! unlocked) return;
-    graph.tick(); band.refresh(); strip.tick(); fx.tick(); smart.tick(); if (mix.isVisible()) mix.tick();
+    graph.tick(); band.refresh(); strip.tick(); fx.tick(); if (layoutMode == 4 && fxWanted()) { bandDyn.refresh(); stripAn.tick(); fx2.tick(); } smart.tick(); if (mix.isVisible()) mix.tick();
     undoBtn.setEnabled (proc.undo.canUndo()); redoBtn.setEnabled (proc.undo.canRedo());
 }
 

@@ -114,15 +114,50 @@ public:
     void refresh()   // chamado pelo timer
     {
         const auto p = proc.getBand (band); const bool cut = pq::typeIsCut (p.type), gt = pq::typeHasGain (p.type);
-        slopeBox.setVisible (cut); gain.s.setEnabled (gt); q.s.setEnabled (! cut || pq::kSlopeOrder[p.slope] == 2);
+        slopeBox.setVisible (cut && part != 2); gain.s.setEnabled (gt); q.s.setEnabled (! cut || pq::kSlopeOrder[p.slope] == 2);
         const bool dynOn = gt && p.dyn && p.on;
         for (auto* k : { &thr, &range, &ratio, &attack, &hold, &release, &knee }) k->s.setEnabled (dynOn);
         detBox.setEnabled (dynOn); dirBox.setEnabled (dynOn); dynBtn.setEnabled (gt);
         const bool l = proc.listenBand.load() == band; if (listenBtn.getToggleState() != l) listenBtn.setToggleState (l, juce::dontSendNotification);
     }
 
+    // partes: 0 = painel completo (classico), 1 = linha compacta da banda (Freq/Gain/Q), 2 = cartao DINAMICA da gaveta EXPERT
+    void setPart (int p)
+    {
+        part = p; const bool dynK = part != 1, mainK = part != 2;
+        for (auto* k : { &thr, &range, &ratio, &attack, &hold, &release, &knee }) { k->s.setVisible (dynK); k->l.setVisible (dynK); }
+        for (auto* k : { &freq, &gain, &q }) { k->s.setVisible (mainK); k->l.setVisible (mainK); }
+        detBox.setVisible (dynK); dirBox.setVisible (dynK);
+        for (auto* c : std::initializer_list<juce::Component*> { &onBtn, &listenBtn, &copyBtn, &pasteBtn, &delBtn, &typeBox, &placeBox, &tsBox }) c->setVisible (mainK);
+        refresh(); resized(); repaint();
+    }
     void resized() override
     {
+        if (part == 1)
+        {
+            auto r = getLocalBounds().reduced (10, 6); auto top = r.removeFromTop (28);
+            struct It { juce::Component* c; int w; };
+            const std::vector<It> L { { &onBtn, 46 }, { nullptr, 84 }, { &typeBox, 100 }, { &placeBox, 74 }, { &slopeBox, 96 }, { &dynBtn, 56 }, { &tsBox, 92 } }, R { { &delBtn, 56 }, { &pasteBtn, 50 }, { &copyBtn, 54 }, { &listenBtn, 60 } };
+            int sum = 0; for (auto& i : L) sum += i.w + 6; for (auto& i : R) sum += i.w + 5;
+            const double sc = std::min (1.0, (double) top.getWidth() / (double) sum);
+            for (auto& i : L) { auto a = top.removeFromLeft ((int) (i.w * sc)); if (i.c != nullptr) i.c->setBounds (a); top.removeFromLeft ((int) (6 * sc)); }
+            for (auto& i : R) { i.c->setBounds (top.removeFromRight ((int) (i.w * sc))); top.removeFromRight ((int) (5 * sc)); }
+            r.removeFromTop (6);
+            const int w = std::min (r.getWidth() / 3, 190); int x = r.getX() + 10;
+            for (auto* k : { &freq, &gain, &q }) { auto c = juce::Rectangle<int> (x, r.getY(), w, r.getHeight()); k->l.setBounds (c.removeFromTop (14)); k->s.setBounds (c); x += w; }
+            return;
+        }
+        if (part == 2)
+        {
+            auto r = getLocalBounds().reduced (10, 8); auto top = r.removeFromTop (24);
+            dynBtn.setBounds (top.removeFromRight (56));
+            auto row = r.removeFromTop (24); detBox.setBounds (row.removeFromLeft (row.getWidth() / 2 - 3)); row.removeFromLeft (6); dirBox.setBounds (row);
+            r.removeFromTop (4);
+            const int cw = r.getWidth() / 4, ch = r.getHeight() / 2; int i = 0;
+            for (auto* k : { &thr, &range, &ratio, &attack, &hold, &release, &knee })
+            { auto c = juce::Rectangle<int> (r.getX() + (i % 4) * cw, r.getY() + (i / 4) * ch, cw, ch); k->l.setBounds (c.removeFromTop (12)); k->s.setBounds (c); ++i; }
+            return;
+        }
         auto r = getLocalBounds().reduced (10, 6); auto top = r.removeFromTop (28);
         onBtn.setBounds (top.removeFromLeft (46)); top.removeFromLeft (14);
         top.removeFromLeft (70); typeBox.setBounds (top.removeFromLeft (100)); top.removeFromLeft (6);
@@ -139,11 +174,13 @@ public:
     {
         using namespace pqui;
         g.setColour (kPanel); g.fillRoundedRectangle (getLocalBounds().toFloat(), 8.f);
+        if (part == 2) { g.setColour (kWarn); g.fillRoundedRectangle (0.f, 0.f, (float) getWidth(), 3.f, 1.5f); g.setFont (fontOf (12.f, true)); g.drawText (T8 ("DINÂMICA"), 12, 8, 120, 24, juce::Justification::centredLeft); return; }
         g.setColour (bandColour (band)); g.fillEllipse (60.f, 13.f, 12.f, 12.f);
         g.setColour (kText); g.setFont (fontOf (12.f, true)); g.drawText (T8 ("Banda ") + juce::String (band + 1), 76, 6, 80, 26, juce::Justification::centredLeft);
-        g.setColour (kLine); g.drawVerticalLine ((int) ((float) freq.s.getX() + 3 * (float) freq.s.getWidth() - 4), 40.f, (float) getHeight() - 8.f);
+        if (part == 0) { g.setColour (kLine); g.drawVerticalLine ((int) ((float) freq.s.getX() + 3 * (float) freq.s.getWidth() - 4), 40.f, (float) getHeight() - 8.f); }
     }
 private:
+    int part = 0;
     struct Knob { juce::Slider s; juce::Label l; std::unique_ptr<SliderAtt> att; const char* id = ""; std::function<juce::String (double)> fmt; std::function<double (const juce::String&)> parse; };
     void fill (juce::ComboBox& c, std::initializer_list<const char*> items) { int i = 1; for (auto* it : items) c.addItem (it, i++); addAndMakeVisible (c); }
     PrimeqProcessor& proc; int band = 0;
@@ -185,8 +222,34 @@ public:
         const double fs = proc.sampleRateNow(); const int lat = proc.currentLatency();
         info.setText (T8 ("Latencia ") + juce::String (lat) + " smp (" + juce::String (1000.0 * lat / fs, 1) + " ms)    CPU " + juce::String (proc.cpuLoad.load() * 100.f, 1) + " %" + (tsUsed() ? "    T/S " + juce::String ((int) std::lround (proc.transientNow() * 100.f)) + " %" : juce::String()), juce::dontSendNotification);
     }
+    // partes: 0 = faixa completa (classico), 1 = cartao SAIDA, 2 = cartao ANALISE/MEDICAO da gaveta EXPERT
+    void setPart (int p)
+    {
+        part = p; const bool o = part != 2, a = part != 1;
+        for (auto* c : std::initializer_list<juce::Component*> { &outK, &outL, &meter, &autoB, &deltaB, &scB }) c->setVisible (o);
+        for (auto* c : std::initializer_list<juce::Component*> { &phB, &frB, &fftC, &viewC, &tiltC, &rngC, &lFft, &lView, &lTilt, &lRng, &info }) c->setVisible (a);
+        resized(); repaint();
+    }
     void resized() override
     {
+        if (part == 1)
+        {
+            auto r = getLocalBounds().reduced (12, 10);
+            auto o = r.removeFromLeft (84); outL.setBounds (o.removeFromTop (14)); outK.setBounds (o); r.removeFromLeft (8);
+            meter.setBounds (r.removeFromLeft (30).reduced (0, 2)); r.removeFromLeft (12);
+            autoB.setBounds (r.removeFromTop (28)); r.removeFromTop (6); deltaB.setBounds (r.removeFromTop (28)); r.removeFromTop (6); scB.setBounds (r.removeFromTop (28));
+            return;
+        }
+        if (part == 2)
+        {
+            auto r = getLocalBounds().reduced (12, 8); r.removeFromTop (22);
+            const int cw = r.getWidth() / 2; auto row1 = r.removeFromTop (44); auto row2 = r.removeFromTop (44);
+            auto cell = [] (juce::Rectangle<int> a, juce::Label& l, juce::ComboBox& c) { a.removeFromRight (6); l.setBounds (a.removeFromTop (14)); c.setBounds (a.removeFromTop (26)); };
+            cell (row1.removeFromLeft (cw), lFft, fftC); cell (row1, lView, viewC); cell (row2.removeFromLeft (cw), lTilt, tiltC); cell (row2, lRng, rngC);
+            r.removeFromTop (4); auto b = r.removeFromTop (28); phB.setBounds (b.removeFromLeft (b.getWidth() / 2 - 3)); b.removeFromLeft (6); frB.setBounds (b);
+            r.removeFromTop (4); info.setBounds (r.removeFromTop (16));
+            return;
+        }
         auto r = getLocalBounds().reduced (10, 6);
         auto o = r.removeFromLeft (84); outL.setBounds (o.removeFromTop (14)); outK.setBounds (o); r.removeFromLeft (8);
         meter.setBounds (r.removeFromLeft (30).reduced (0, 2)); r.removeFromLeft (14);
@@ -198,8 +261,13 @@ public:
         cb (lFft, fftC, 74); cb (lView, viewC, 84); cb (lTilt, tiltC, 92); cb (lRng, rngC, 82);
         info.setBounds (r);
     }
-    void paint (juce::Graphics& g) override { g.setColour (pqui::kPanel); g.fillRoundedRectangle (getLocalBounds().toFloat(), 8.f); }
+    void paint (juce::Graphics& g) override
+    {
+        g.setColour (pqui::kPanel); g.fillRoundedRectangle (getLocalBounds().toFloat(), 8.f);
+        if (part == 2) { g.setColour (pqui::kDim); g.fillRoundedRectangle (0.f, 0.f, (float) getWidth(), 3.f, 1.5f); g.setColour (pqui::kText); g.setFont (pqui::fontOf (12.f, true)); g.drawText (pqui::T8 ("ANÁLISE · MEDIÇÃO"), 12, 8, getWidth() - 24, 20, juce::Justification::centredLeft); }
+    }
 private:
+    int part = 0;
     bool tsUsed() const { for (int b = 0; b < pq::kNumBands; ++b) if (proc.getParamReal (juce::String (pq::bid (b, "ts"))) > 0.5f && proc.getParamReal (juce::String (pq::bid (b, "on"))) > 0.5f) return true; return false; }
     PrimeqProcessor& proc; LevelMeter meter;
     juce::Slider outK; juce::Label outL, info, lFft, lView, lTilt, lRng;
@@ -258,8 +326,39 @@ public:
         for (auto* k : { &dhAmt, &dhLo, &dhHi, &dhSens, &dhAtk, &dhRel }) k->s.setEnabled (dhOn.getToggleState());
         const bool chOn = chMode.getSelectedItemIndex() > 0; chDrive.s.setEnabled (chOn); chMix.s.setEnabled (chOn); chOs.setEnabled (chOn);
     }
+    // partes: 0 = faixa completa (classico), 1 = cartao DE-HARSH, 2 = cartao CARACTER / T/S da gaveta EXPERT
+    void setPart (int p)
+    {
+        part = p; const bool d = part != 2, c = part != 1;
+        for (auto* k : { &dhAmt, &dhLo, &dhHi, &dhSens, &dhAtk, &dhRel }) { k->s.setVisible (d); k->l.setVisible (d); }
+        for (auto* k : { &chDrive, &chMix }) { k->s.setVisible (c); k->l.setVisible (c); }
+        for (auto* x : std::initializer_list<juce::Component*> { &dhOn, &dhDelta, &info }) x->setVisible (d);
+        for (auto* x : std::initializer_list<juce::Component*> { &chMode, &chOs, &look, &tsEng, &lMode, &lOs, &lLook, &lTsEng, &lTsSep, &lTsSm, &tsSep, &tsSm }) x->setVisible (c);
+        resized(); repaint();
+    }
     void resized() override
     {
+        if (part == 1)
+        {
+            auto r = getLocalBounds().reduced (12, 8); auto top = r.removeFromTop (24);
+            dhOn.setBounds (top.removeFromLeft (100)); top.removeFromLeft (6); dhDelta.setBounds (top.removeFromLeft (70));
+            info.setBounds (r.removeFromTop (16)); r.removeFromTop (2);
+            const int cw = r.getWidth() / 3, ch = r.getHeight() / 2; int i = 0;
+            for (auto* k : { &dhAmt, &dhLo, &dhHi, &dhSens, &dhAtk, &dhRel })
+            { auto c = juce::Rectangle<int> (r.getX() + (i % 3) * cw, r.getY() + (i / 3) * ch, cw, ch); k->l.setBounds (c.removeFromTop (12)); k->s.setBounds (c); ++i; }
+            return;
+        }
+        if (part == 2)
+        {
+            auto r = getLocalBounds().reduced (12, 8); r.removeFromTop (20);
+            auto blk = r.removeFromTop (72); auto right = blk.removeFromRight (blk.getWidth() * 0.5f); blk.removeFromRight (6);
+            { const int w = blk.getWidth() / 2; int x = blk.getX(); for (auto* k : { &chDrive, &chMix }) { auto c = juce::Rectangle<int> (x, blk.getY(), w, blk.getHeight()); k->l.setBounds (c.removeFromTop (12)); k->s.setBounds (c); x += w; } }
+            lMode.setBounds (right.removeFromTop (12)); chMode.setBounds (right.removeFromTop (22)); right.removeFromTop (2); lOs.setBounds (right.removeFromTop (12)); chOs.setBounds (right.removeFromTop (22));
+            r.removeFromTop (4); auto row = r.removeFromTop (36); auto rl = row.removeFromLeft (row.getWidth() / 2 - 3); row.removeFromLeft (6);
+            lLook.setBounds (rl.removeFromTop (12)); look.setBounds (rl.removeFromTop (22)); lTsEng.setBounds (row.removeFromTop (12)); tsEng.setBounds (row.removeFromTop (22));
+            r.removeFromTop (4); auto a = r.removeFromTop (17); lTsSep.setBounds (a.removeFromLeft (70)); tsSep.setBounds (a); auto b = r.removeFromTop (17); lTsSm.setBounds (b.removeFromLeft (70)); tsSm.setBounds (b);
+            return;
+        }
         auto r = getLocalBounds().reduced (10, 6);
         auto left = r.removeFromLeft (r.getWidth() * 0.57f); r.removeFromLeft (10);
         { auto top = left.removeFromTop (22); dhOn.setBounds (top.removeFromLeft (100)); top.removeFromLeft (6); dhDelta.setBounds (top.removeFromLeft (76)); top.removeFromLeft (10); info.setBounds (top);
@@ -276,9 +375,12 @@ public:
     void paint (juce::Graphics& g) override
     {
         using namespace pqui; g.setColour (kPanel); g.fillRoundedRectangle (getLocalBounds().toFloat(), 8.f);
+        if (part == 1) { g.setColour (juce::Colour (0xffa78bfa)); g.fillRoundedRectangle (0.f, 0.f, (float) getWidth(), 3.f, 1.5f); return; }
+        if (part == 2) { g.setColour (kTeal); g.fillRoundedRectangle (0.f, 0.f, (float) getWidth(), 3.f, 1.5f); g.setColour (kText); g.setFont (fontOf (12.f, true)); g.drawText (T8 ("CARÁCTER · T/S"), 12, 8, getWidth() - 24, 18, juce::Justification::centredLeft); return; }
         g.setColour (kLine); g.drawVerticalLine ((int) (getWidth() * 0.57f + 6), 10.f, (float) getHeight() - 10.f); g.drawVerticalLine ((int) (getWidth() * 0.57f + 10 + (getWidth() - 20) * 0.43f * 0.66f + 5), 10.f, (float) getHeight() - 10.f);
     }
 private:
+    int part = 0;
     struct Knob { juce::Slider s; juce::Label l; std::unique_ptr<SliderAtt> att; };
     PrimeqProcessor& proc; Knob dhAmt, dhLo, dhHi, dhSens, dhAtk, dhRel, chDrive, chMix;
     juce::ToggleButton dhOn, dhDelta; juce::ComboBox chMode, chOs, look, tsEng; juce::Label info, lMode, lOs, lLook, lTsEng, lTsSep, lTsSm; juce::Slider tsSep, tsSm;
@@ -580,8 +682,9 @@ public:
     // ---- pre-visualizacao de organizacao da GUI: 0 classico, 1 = A (cabecalho limpo + FERRAMENTAS + EXPERT), 2 = B (barra lateral), 3 = C (abas por cima da banda)
     static int& layoutPref() { static int v = 0; return v; }
     bool fxWanted() const { return layoutMode == 0 ? proc.uiMode != 0 : expertBtn.getToggleState(); }
-    void setLayout (int m) { layoutMode = juce::jlimit (0, 3, m); layoutPref() = layoutMode; applyLayout(); }
+    void setLayout (int m) { layoutMode = juce::jlimit (0, 4, m); layoutPref() = layoutMode; applyLayout(); }
     void applyLayout();
+    void updateBottom();   // visibilidade dos paineis inferiores (modo 4 = B + gaveta EXPERT)
     void setExpert (bool on) { expertBtn.setToggleState (on, juce::dontSendNotification); applyMode(); }
     int getLayoutMode() const { return layoutMode; }
     void toolsMenu();
@@ -602,7 +705,7 @@ public:
     }
     pqui::VisualMixer& getVisualMixer() { return vmix; }
     pqui::MixMap3D& getMap() { return map3d; }
-    void showMix (bool s) { if (s) { showMap (false); showMixer (false); } mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip }) c->setVisible (! s); fx.setVisible (! s && fxWanted()); if (s) { smart.setVisible (false); studio.setActive (false); studioBtn.setToggleState (false, juce::dontSendNotification); } else smart.setVisible (smartBtn.getToggleState()); resized(); }
+    void showMix (bool s) { if (s) { showMap (false); showMixer (false); } mixBtn.setToggleState (s, juce::dontSendNotification); mix.setVisible (s); for (auto* c : std::initializer_list<juce::Component*> { &graph, &band, &strip }) c->setVisible (! s); updateBottom(); if (s) { smart.setVisible (false); studio.setActive (false); studioBtn.setToggleState (false, juce::dontSendNotification); } else smart.setVisible (smartBtn.getToggleState()); resized(); }
     MixPanel& getMix() { return mix; }
     AbxPanel& getAbx() { return abx; }
     OnboardingOverlay& getGuide() { return guide; }
@@ -659,7 +762,7 @@ private:
     int shownSkin = pqui::skinIndex();
     PtGuard ptGuard;   // PRIMEIRO membro: forca PT durante a construcao para capturar os textos-fonte
     PrimeqProcessor& proc; pqui::Lnf lnf;
-    EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; pqui::MixMap3D map3d; pqui::VisualMixer vmix; LoginOverlay login; OnboardingOverlay guide;
+    EqGraph graph; BandPanel band, bandDyn; GlobalStrip strip, stripAn; FxPanel fx, fx2; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; pqui::MixMap3D map3d; pqui::VisualMixer vmix; LoginOverlay login; OnboardingOverlay guide;
     juce::TextButton langBtn { "PT" }, skinBtn { "PRIME" }, toolsBtn { "FERRAMENTAS" }, layoutBtn { "LAYOUT" }; juce::ToggleButton expertBtn { "EXPERT" }; int layoutMode = 0;
     juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
     juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "ZONAS" }, mapBtn { "MAPA 3D" }, vmixBtn { "MIXER" }, collBtn { "COLETIVO" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
