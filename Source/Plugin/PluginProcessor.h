@@ -12,6 +12,7 @@
 #include <vector>
 #include <functional>
 #include "../DSP/EqCore.h"
+#include "../DSP/Hpss.h"
 #include "../DSP/FirDesign.h"
 #include "../DSP/DeHarsh.h"
 #include "../DSP/Character.h"
@@ -141,13 +142,13 @@ private:
 
     struct BandPtrs { std::atomic<float> *on, *type, *freq, *gain, *q, *slope, *place, *dyn, *thr, *range, *ratio, *attack, *hold, *release, *knee, *det, *dir, *ts; };
     std::array<BandPtrs, pq::kNumBands> bp {};
-    std::atomic<float> *pTsSep = nullptr, *pTsSmooth = nullptr;
+    std::atomic<float> *pTsSep = nullptr, *pTsSmooth = nullptr, *pTsEngine = nullptr;
     std::atomic<float> *pPhase = nullptr, *pBypass = nullptr, *pOut = nullptr, *pAuto = nullptr, *pDelta = nullptr, *pScExt = nullptr;
     std::atomic<float> *pLook = nullptr, *pDhOn = nullptr, *pDhAmt = nullptr, *pDhLo = nullptr, *pDhHi = nullptr, *pDhSens = nullptr, *pDhAtk = nullptr, *pDhRel = nullptr, *pDhDelta = nullptr;
     std::atomic<float> *pChMode = nullptr, *pChDrive = nullptr, *pChMix = nullptr, *pChOs = nullptr, *pMorphOn = nullptr, *pMorph = nullptr;
 
     // configuracao REALMENTE aplicada ao caminho wet (muda so com fade-out/fade-in) e a sua latencia
-    struct Stage { int look = 0; bool dh = false; int os = 0; int path = 0; bool operator== (const Stage& o) const { return look == o.look && dh == o.dh && os == o.os && path == o.path; } };
+    struct Stage { int look = 0; bool dh = false; int os = 0; int path = 0; bool spec = false; bool operator== (const Stage& o) const { return look == o.look && dh == o.dh && os == o.os && path == o.path && spec == o.spec; } };
     Stage applied; int procLat = 0;
     int  lookSamplesFor (int choiceIdx) const;
     int  stageLatency (const Stage& s) const;
@@ -165,6 +166,9 @@ private:
     mutable juce::SpinLock decLock; std::vector<pq::studio::Decision> decLog; pq::studio::Curve customTarget = pq::studio::emptyCurve(); bool hasCustom = false;
 
     pq::EqCore core;
+    pq::EqCore coreT, coreS;                                 // motor espectral T/S: um EQ para o fluxo transiente e outro para o tonal
+    pq::Hpss hpss; pq::DelayLine detDelay[2];
+    std::vector<double> xtL, xtR, xsL, xsR, dtL, dtR, cpL, cpR;
     double sr = 48000.0; int maxBlock = 512;
     static constexpr int kChunk = 256, kDryCap = 1 << 16;
     std::vector<double> dL, dR, sL, sR; std::vector<float> fIn[2], fOut[2], dryRing[2], oL, oR, pL, pR, fTmp;

@@ -60,7 +60,7 @@ public:
             bool anyTs = false;
             for (int b = 0; b < kNumBands; ++b) if (params[(size_t) b].on && params[(size_t) b].ts != 0) { anyTs = true; break; }
             double mT[kSub];
-            if (anyTs) tsMask (srcL, srcR, m, mT);
+            if (anyTs && filtering) tsMask (srcL, srcR, m, mT);
             for (int b = 0; b < kNumBands; ++b)
             {
                 const BandParams& p = params[(size_t) b]; BandRt& rb = rt[(size_t) b];
@@ -84,7 +84,7 @@ public:
                     rb.remember (p, gEff);
                 }
                 if (! filtering) continue;
-                if (p.ts != 0 && anyTs)
+                if (p.ts != 0 && anyTs && filtering)
                 {
                     // o filtro corre sempre sobre o sinal completo (estados coerentes); so o resultado e misturado com a mascara
                     double a0[kSub], b0[kSub]; for (int i = 0; i < m; ++i) { a0[i] = l[i]; b0[i] = r[i]; }

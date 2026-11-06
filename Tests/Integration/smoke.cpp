@@ -534,6 +534,16 @@ int main()
         CHECK (allDiff, "Skins: as 3 paletas tem acentos distintos");
         pe->changeSkin (0);
     }
+    // 25) motor espectral T/S: latencia declarada e alinhamento (banda neutra => saida = entrada atrasada)
+    {
+        auto p = make (48000.0, 512); setBandP (*p, 1, "on", 1); setBandP (*p, 1, "gain", 0); setBandP (*p, 1, "ts", 1); setBandP (*p, 2, "on", 1); setBandP (*p, 2, "gain", 0);
+        const int lat0 = p->getLatencySamples(); setP (*p, "ts_engine", 1); const int lat1 = p->getLatencySamples();
+        CHECK (lat1 - lat0 == pq::Hpss::kLatency, "T/S espectral: latencia declarada sobe %d amostras (%d -> %d)", pq::Hpss::kLatency, lat0, lat1);
+        const int n = 512 * 188; std::vector<float> in ((size_t) n), out ((size_t) n); unsigned st = 99; for (int i = 0; i < n; ++i) { st = st * 1664525u + 1013904223u; in[(size_t) i] = 0.2f * std::sin (0.07f * (float) i) + 0.1f * ((st >> 8) / 8388608.f - 1.f); }
+        for (int off = 0; off < n; off += 512) { juce::AudioBuffer<float> b (2, 512); juce::MidiBuffer mb; for (int i = 0; i < 512; ++i) { b.setSample (0, i, in[(size_t) (off + i)]); b.setSample (1, i, in[(size_t) (off + i)]); } p->processBlock (b, mb); for (int i = 0; i < 512; ++i) out[(size_t) (off + i)] = b.getSample (0, i); }
+        const int L = p->getLatencySamples(); double err = 0, ref = 0; for (int i = 48000; i < n; ++i) { const double d = out[(size_t) i] - in[(size_t) (i - L)]; err += d * d; ref += (double) in[(size_t) (i - L)] * in[(size_t) (i - L)]; }
+        CHECK (10.0 * std::log10 (err / ref + 1e-30) < -60.0, "T/S espectral: banda neutra => saida igual a entrada atrasada (%.1f dB)", 10.0 * std::log10 (err / ref + 1e-30));
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }

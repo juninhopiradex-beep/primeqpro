@@ -61,6 +61,8 @@ public:
         }
         return out;
     }
+    const LevelBank& mainBank() const { return main; }
+    const LevelBank& sideBank() const { return side; }
 private:
     LevelBank main, side;
 };

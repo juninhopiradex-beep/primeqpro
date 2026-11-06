@@ -7,6 +7,8 @@
 #include "EqGraph.h"
 #include "../Shared/Units.h"
 #include "../SmartOps/ReferenceMatch.h"
+#include "../SmartOps/Confidence.h"
+#include "../SmartOps/Profiles.h"
 #include "MixPanel.h"
 #include "AbxPanel.h"
 #include "StudioPanel.h"
@@ -234,7 +236,8 @@ public:
             if (auto* pc = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter (id))) c.addItemList (pc->choices, 1);
             addAndMakeVisible (c); a = std::make_unique<ComboAtt> (proc.apvts, id, c);
             l.setText (cap, juce::dontSendNotification); l.setFont (fontOf (10.f)); l.setColour (juce::Label::textColourId, kDim); addAndMakeVisible (l); };
-        combo (chMode, aChMode, "ch_mode", lMode, "CHARACTER"); combo (chOs, aChOs, "ch_os", lOs, "OVERSAMPLING"); combo (look, aLook, "look", lLook, "LOOKAHEAD");
+        combo (chMode, aChMode, "ch_mode", lMode, "CHARACTER"); combo (chOs, aChOs, "ch_os", lOs, "OVERSAMPLING"); combo (look, aLook, "look", lLook, "LOOKAHEAD"); combo (tsEng, aTsEng, "ts_engine", lTsEng, "T/S MOTOR");
+        tsEng.setTooltip (T8 ("Envelope: rápido, zero latência, detetor de envelope · Spectral: separação STFT (mediana tempo/frequência), mais precisa, adiciona 3584 amostras de latência. Só em Zero Latency."));
         for (auto* sp : { &tsSep, &tsSm })
         { sp->setSliderStyle (juce::Slider::LinearHorizontal); sp->setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 16); sp->setColour (juce::Slider::thumbColourId, kTeal); sp->setColour (juce::Slider::trackColourId, kTealDim); sp->setColour (juce::Slider::backgroundColourId, kLine); addAndMakeVisible (*sp); }
         aTsSep = std::make_unique<SliderAtt> (proc.apvts, "ts_sep", tsSep); aTsSm = std::make_unique<SliderAtt> (proc.apvts, "ts_smooth", tsSm);
@@ -264,8 +267,9 @@ public:
         { auto top = mid.removeFromTop (22); lMode.setBounds (top.removeFromLeft (70)); chMode.setBounds (top.removeFromLeft (92)); top.removeFromLeft (8); lOs.setBounds (top.removeFromLeft (92)); chOs.setBounds (top.removeFromLeft (60));
           const int w = mid.getWidth() / 2; int x = mid.getX();
           for (auto* k : { &chDrive, &chMix }) { auto c = juce::Rectangle<int> (x, mid.getY(), w, mid.getHeight()); k->l.setBounds (c.removeFromTop (12)); k->s.setBounds (c); x += w; } }
-        { lLook.setBounds (r.removeFromTop (14)); look.setBounds (r.removeFromTop (22)); r.removeFromTop (3);
-          auto a = r.removeFromTop (19); lTsSep.setBounds (a.removeFromLeft (62)); tsSep.setBounds (a); auto b = r.removeFromTop (19); lTsSm.setBounds (b.removeFromLeft (62)); tsSm.setBounds (b); }
+        { auto a0 = r.removeFromTop (20); lLook.setBounds (a0.removeFromLeft (62)); look.setBounds (a0); r.removeFromTop (2);
+          auto a1 = r.removeFromTop (20); lTsEng.setBounds (a1.removeFromLeft (62)); tsEng.setBounds (a1); r.removeFromTop (2);
+          auto a = r.removeFromTop (17); lTsSep.setBounds (a.removeFromLeft (62)); tsSep.setBounds (a); auto b = r.removeFromTop (17); lTsSm.setBounds (b.removeFromLeft (62)); tsSm.setBounds (b); }
     }
     void paint (juce::Graphics& g) override
     {
@@ -275,8 +279,8 @@ public:
 private:
     struct Knob { juce::Slider s; juce::Label l; std::unique_ptr<SliderAtt> att; };
     PrimeqProcessor& proc; Knob dhAmt, dhLo, dhHi, dhSens, dhAtk, dhRel, chDrive, chMix;
-    juce::ToggleButton dhOn, dhDelta; juce::ComboBox chMode, chOs, look; juce::Label info, lMode, lOs, lLook, lTsSep, lTsSm; juce::Slider tsSep, tsSm;
-    std::unique_ptr<SliderAtt> aTsSep, aTsSm; std::unique_ptr<ButtonAtt> aDhOn, aDhDelta; std::unique_ptr<ComboAtt> aChMode, aChOs, aLook;
+    juce::ToggleButton dhOn, dhDelta; juce::ComboBox chMode, chOs, look, tsEng; juce::Label info, lMode, lOs, lLook, lTsEng, lTsSep, lTsSm; juce::Slider tsSep, tsSm;
+    std::unique_ptr<SliderAtt> aTsSep, aTsSm; std::unique_ptr<ButtonAtt> aDhOn, aDhDelta; std::unique_ptr<ComboAtt> aChMode, aChOs, aLook, aTsEng;
 };
 
 // ------------------------------------------------------------------------------------------ Smart Ops
@@ -290,6 +294,7 @@ public:
         using namespace pqui;
         opBox.addItem ("Deresonate", Deres); opBox.addItem ("De-Ess", DeEssOp); opBox.addItem ("Reference Match", MatchOp); opBox.addItem ("Unmask (sidechain)", UnmaskOp); opBox.addItem ("Morph A \xE2\x86\x94 B", MorphOp);
         opBox.setSelectedId (Deres, juce::dontSendNotification); opBox.onChange = [this] { configureOp(); }; addAndMakeVisible (opBox);
+        profileBox.setTooltip (T8 ("Perfil de partida para esta operação (valores editáveis)")); profileBox.onChange = [this] { applyProfile(); }; addAndMakeVisible (profileBox);
         modeBox.addItem ("Analisar", 1); modeBox.addItem ("Assistir", 2); modeBox.addItem ("Auto (opt-in)", 3); modeBox.setSelectedId (2, juce::dontSendNotification); addAndMakeVisible (modeBox);
         modeBox.setTooltip (T8 ("Analisar: só mostra evidências e sugestões, nada é aplicado · Assistir: pré-visualiza e você aplica · Auto: aplica sozinho ao parar o Learn, só com confiança média/alta (Revert desfaz)"));
         for (auto* b : { &learnB, &stopB, &applyB, &revertB, &loadRefB, &capA, &capB, &clearMorphB }) addAndMakeVisible (b);
@@ -332,7 +337,8 @@ public:
         auto r = getLocalBounds().reduced (12, 10); r.removeFromTop (22);
         opBox.setBounds (r.removeFromTop (28)); r.removeFromTop (6);
         const bool morph = op() == MorphOp, match = op() == MatchOp;
-        modeBox.setVisible (! morph); if (! morph) { modeBox.setBounds (r.removeFromTop (26)); r.removeFromTop (6); } else r.removeFromTop (2);
+        modeBox.setVisible (! morph); profileBox.setVisible (! morph);
+        if (! morph) { profileBox.setBounds (r.removeFromTop (26)); r.removeFromTop (4); modeBox.setBounds (r.removeFromTop (26)); r.removeFromTop (6); } else r.removeFromTop (2);
         for (auto* c : std::initializer_list<juce::Component*> { &learnB, &stopB, &applyB, &revertB, &sens, &maxCut, &maxBands, &lSens, &lCut, &lBands }) c->setVisible (! morph);
         for (auto* c : std::initializer_list<juce::Component*> { &capA, &capB, &clearMorphB, &morphOnB, &morphS, &lMorph }) c->setVisible (morph);
         loadRefB.setVisible (match);
@@ -360,17 +366,33 @@ public:
     void refreshLanguage() { if (! proc.analyzer.isLearning() && graph.preview.empty()) configureOp(); refreshMorphStatus(); repaint(); }
 private:
     int mode() const { return modeBox.getSelectedId(); }
-    // confianca deterministica: quanto material foi recolhido face ao necessario para esta operacao (0 baixa, 1 media, 2 alta)
-    int confidence() const
-    {
-        const double need = op() == MatchOp ? 20.0 : (op() == UnmaskOp ? 12.0 : (op() == DeEssOp ? 8.0 : 10.0)), ratio = learnSeconds() / need;
-        return ratio >= 1.0 ? 2 : (ratio >= 0.5 ? 1 : 0);
-    }
+    // confianca MEDIDA (ver SmartOps/Confidence.h): material, estabilidade entre metades do material e proeminencia do achado
+    int confidence() const { return lastConf.level(); }
     juce::String confidenceText() const
     {
-        static const char* nm[3] = { "BAIXA", "MÉDIA", "ALTA" }; const int c = confidence();
+        static const char* nm[3] = { "BAIXA", "MÉDIA", "ALTA" }; const int c = lastConf.level();
         const char* risk = op() == DeEssOp ? "risco: perder brilho de hi-hats/pratos" : (op() == MatchOp ? "risco: alterar o carácter do material" : (op() == UnmaskOp ? "risco: buraco audível se o sidechain falhar" : "risco: tirar ressonâncias naturais do instrumento"));
-        return T8 ("Confiança: ") + T8 (nm[c]) + " (" + juce::String (learnSeconds(), 0) + " s)  ·  " + T8 (risk) + (c == 0 ? T8 ("  — recolha mais material.") : juce::String());
+        juce::String t = T8 ("Confiança: ") + T8 (nm[c]) + " (" + juce::String ((int) std::lround (lastConf.score * 100.0)) + " %)  ·  ";
+        if (lastConf.agree >= 0) t << T8 ("estabilidade ") << lastConf.agree << "/" << lastConf.total << "  ·  ";
+        else t << T8 ("estabilidade ") << juce::String ((int) std::lround (lastConf.stability * 100.0)) << " %  ·  ";
+        t << juce::String (lastConf.seconds, 0) << " s  ·  " << T8 ("achado ") << "+" << juce::String (lastConf.prominenceDb, 1) << " dB\n" << T8 (risk);
+        return t + (c == 0 ? T8 ("  — recolha mais material.") : juce::String());
+    }
+    void fillProfiles()
+    {
+        profileBox.clear (juce::dontSendNotification); profLo = 0; profHi = 1e9;
+        profileBox.addItem (T8 ("Perfil: personalizado"), 1); int id = 2;
+        for (const auto& pr : pq::profiles::of (op())) profileBox.addItem (T8 (pr.name), id++);
+        profileBox.setSelectedId (1, juce::dontSendNotification);
+    }
+    void applyProfile()
+    {
+        const int k = profileBox.getSelectedId() - 2; const auto& v = pq::profiles::of (op());
+        if (k < 0 || k >= (int) v.size()) { profLo = 0; profHi = 1e9; recompute(); return; }
+        const auto& pr = v[(size_t) k]; profLo = pr.fmin; profHi = pr.fmax;
+        sens.setValue (pr.a, juce::dontSendNotification); maxCut.setValue (pr.b, juce::dontSendNotification); if (pr.c > 0) maxBands.setValue (pr.c, juce::dontSendNotification);
+        note.setText (T8 (pr.note) + juce::String (juce::CharPointer_UTF8 ("  (")) + juce::String (pq::units::formatFreq (pr.fmin)) + " – " + juce::String (pq::units::formatFreq (pr.fmax)) + ")", juce::dontSendNotification);
+        recompute();
     }
     double learnSeconds() const
     {
@@ -385,7 +407,7 @@ private:
     void configureOp()
     {
         using namespace pqui;
-        graph.showPreview = false; graph.preview.clear(); learned = false;
+        graph.showPreview = false; graph.preview.clear(); learned = false; fillProfiles();
         auto cfg = [&] (juce::Slider& s, juce::Label& l, const char* name, double lo, double hi, double v, double step, const char* suf) { l.setText (T8 (name), juce::dontSendNotification); s.setRange (lo, hi, step); s.setValue (v, juce::dontSendNotification); s.setTextValueSuffix (suf); };
         switch (op())
         {
@@ -453,15 +475,19 @@ private:
     {
         if (! learned) return;
         auto& an = proc.analyzer; juce::String head;
+        const double lo = profLo, hi = profHi; lastConf = pq::Confidence();
+        auto inRange = [lo, hi] (std::vector<pq::DeresProposal>& v) { v.erase (std::remove_if (v.begin(), v.end(), [lo, hi] (const pq::DeresProposal& p) { return p.freq < lo || p.freq > hi; }), v.end()); };
         switch (op())
         {
-            case Deres: graph.preview = an.deresonate().propose (sens.getValue(), maxCut.getValue(), (int) maxBands.getValue()); head = T8 (" ressonância(s): "); break;
-            case DeEssOp: graph.preview = an.deEss().propose (sens.getValue() / 100.0, maxCut.getValue()); head = T8 (" banda de de-ess: "); break;
-            case UnmaskOp: graph.preview = an.unmaskEngine().propose (sens.getValue(), maxCut.getValue(), (int) maxBands.getValue()); head = T8 (" corte(s) dinâmico(s): "); break;
+            case Deres: graph.preview = an.deresonate().propose (sens.getValue(), maxCut.getValue(), (int) maxBands.getValue(), std::max (30.0, lo), std::min (18000.0, hi));
+                lastConf = pq::conf::deres (an.deresonate(), sens.getValue(), maxCut.getValue(), (int) maxBands.getValue(), std::max (30.0, lo), std::min (18000.0, hi)); head = T8 (" ressonância(s): "); break;
+            case DeEssOp: graph.preview = an.deEss().propose (sens.getValue() / 100.0, maxCut.getValue()); inRange (graph.preview); lastConf = pq::conf::deess (an.deEss()); if (graph.preview.empty()) lastConf.any = false; head = T8 (" banda de de-ess: "); break;
+            case UnmaskOp: graph.preview = an.unmaskEngine().propose (sens.getValue(), maxCut.getValue(), (int) maxBands.getValue()); inRange (graph.preview); lastConf = pq::conf::unmask (an.unmaskEngine(), sens.getValue()); if (graph.preview.empty()) lastConf.any = false; head = T8 (" corte(s) dinâmico(s): "); break;
             case MatchOp:
                 graph.preview.clear();
                 if (proc.matchRefDb.empty()) { setStatus (T8 ("Falta carregar a referência.")); graph.showPreview = false; graph.repaint(); return; }
                 graph.preview = pq::matchPropose (proc.matchRefDb, pq::toLogDb (an.deresonate().meanPower(), an.sampleRate()), sens.getValue() / 100.0, (int) maxBands.getValue(), maxCut.getValue(), an.sampleRate());
+                inRange (graph.preview); lastConf = pq::conf::match (an.deresonate(), graph.preview);
                 head = T8 (" banda(s) para igualar ") + proc.matchRefName + ": "; break;
             default: return;
         }
@@ -472,7 +498,7 @@ private:
     }
     void setStatus (const juce::String& s) { status.setText (s, juce::dontSendNotification); }
     PrimeqProcessor& proc; EqGraph& graph; bool learned = false;
-    juce::ComboBox opBox, modeBox; juce::TextButton learnB { "Learn" }, stopB { "Stop" }, applyB { "Apply" }, revertB { "Revert" }, loadRefB { "Carregar refer\xC3\xAAncia..." }, capA { "Guardar A" }, capB { "Guardar B" }, clearMorphB { "Limpar A/B" };
+    juce::ComboBox opBox, modeBox, profileBox; double profLo = 0, profHi = 1e9; pq::Confidence lastConf; juce::TextButton learnB { "Learn" }, stopB { "Stop" }, applyB { "Apply" }, revertB { "Revert" }, loadRefB { "Carregar refer\xC3\xAAncia..." }, capA { "Guardar A" }, capB { "Guardar B" }, clearMorphB { "Limpar A/B" };
     juce::ToggleButton morphOnB; juce::Slider sens, maxCut, maxBands, morphS; juce::Label lSens, lCut, lBands, status, note, lMorph;
     std::unique_ptr<ButtonAtt> aMorphOn; std::unique_ptr<SliderAtt> aMorph; std::unique_ptr<juce::FileChooser> chooser;
 };

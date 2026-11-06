@@ -3,6 +3,7 @@
 #include "../../Source/Shared/PccProtocol.h"
 #include "../../Source/Shared/Licensing.h"
 #include "../../Source/DSP/EqCore.h"
+#include "../../Source/DSP/Hpss.h"
 #include "../../Source/DSP/FirDesign.h"
 #include "../../Source/Analysis/SpectrumCalc.h"
 #include "../../Source/SmartOps/Deresonate.h"
@@ -607,6 +608,30 @@ int main()
         { Rig a, c; a.b[0].on = c.b[0].on = true; a.b[0].gain = c.b[0].gain = 5; c.b[0].ts = 0; std::vector<double> x (4096), y (4096), x2, y2; for (size_t i = 0; i < 4096; ++i) x[i] = y[i] = 0.3 * std::sin (0.05 * (double) i); x2 = x; y2 = y;
           a.push(); c.push(); a.eq.process (x.data(), x2.data(), 4096, nullptr, nullptr, true); c.eq.process (y.data(), y2.data(), 4096, nullptr, nullptr, true); double d = 0; for (size_t i = 0; i < 4096; ++i) d = std::max (d, std::fabs (x[i] - y[i]));
           CHECK (d == 0.0, "T/S: ts=Ambos e bit-identico ao caminho normal"); }
+    }
+    // HPSS: separacao espectral transiente/tonal
+    {
+        pq::Hpss h; const int n = 48000 * 3; std::vector<double> x (n), tl (n), tr (n), sl (n), sr (n), xr (n);
+        std::mt19937 g (3); std::uniform_real_distribution<double> u (-1.0, 1.0);
+        for (int i = 0; i < n; ++i)
+        {
+            double v = 0.2 * std::sin (2.0 * M_PI * 440.0 * i / 48000.0) + 0.12 * std::sin (2.0 * M_PI * 1250.0 * i / 48000.0);
+            const int ph = i % 12000; if (ph < 60) v += 0.7 * u (g) * (1.0 - ph / 60.0);                        // clique de banda larga a cada 250 ms
+            x[(size_t) i] = v; xr[(size_t) i] = 0.5 * v;
+        }
+        h.setSeparation (0.6); for (int off = 0; off < n; off += 300) { const int m = std::min (300, n - off); h.process (x.data() + off, xr.data() + off, m, tl.data() + off, tr.data() + off, sl.data() + off, sr.data() + off); }
+        const int L = pq::Hpss::kLatency; double err = 0, eT = 0, eS = 0, cT = 0, cS = 0, tonT = 0, tonS = 0;
+        for (int i = 60000; i < n - 1; ++i)
+        {
+            const double d = x[(size_t) (i - L)]; err = std::max (err, std::fabs (tl[(size_t) i] + sl[(size_t) i] - d));
+            const int ph = (i - L) % 12000; const bool click = ph < 120;
+            if (click) { cT += tl[(size_t) i] * tl[(size_t) i]; cS += sl[(size_t) i] * sl[(size_t) i]; } else { tonT += tl[(size_t) i] * tl[(size_t) i]; tonS += sl[(size_t) i] * sl[(size_t) i]; }
+            eT += tl[(size_t) i] * tl[(size_t) i]; eS += sl[(size_t) i] * sl[(size_t) i];
+        }
+        const double clickShare = 10.0 * std::log10 (cT / std::max (1e-30, cS)), tonalShare = 10.0 * std::log10 (tonS / std::max (1e-30, tonT));
+        CHECK (err < 1e-9, "HPSS: T + S reconstroi a entrada atrasada (erro max %.2e)", err);
+        CHECK (cT / eT > 0.5 && cS / eS < 0.2, "HPSS: a energia do canal Transiente concentra-se nos cliques (%.0f %% de T; so %.0f %% de S) (T/S na janela %.1f dB)", 100.0 * cT / eT, 100.0 * cS / eS, clickShare);
+        CHECK (tonalShare > 10.0, "HPSS: nas partes sustentadas o canal Tonal domina (S/T %.1f dB)", tonalShare);
     }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;

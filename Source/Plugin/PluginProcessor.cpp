@@ -56,6 +56,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout PrimeqProcessor::createLayou
     }
     L.add (std::make_unique<APF> (PID ("ts_sep"), "T/S Separation", juce::NormalisableRange<float> (0.f, 100.f, 0.1f), 60.f, FA().withLabel ("%")));
     L.add (std::make_unique<APF> (PID ("ts_smooth"), "T/S Smooth", skewed (1.f, 100.f, 10.f), 8.f, FA().withLabel ("ms")));
+    L.add (std::make_unique<APC> (PID ("ts_engine"), "T/S Engine", juce::StringArray { "Envelope", "Spectral" }, 0));
     L.add (std::make_unique<APC> (PID ("phase"), "Phase Mode", juce::StringArray { "Zero Latency", "Natural Phase", "Linear Phase" }, 0));
     L.add (std::make_unique<APB> (PID ("bypass"), "Bypass", false));
     L.add (std::make_unique<APF> (PID ("out"), "Output Gain", juce::NormalisableRange<float> (-24.f, 24.f, 0.01f), 0.f, FA().withLabel ("dB")));
@@ -99,14 +100,14 @@ PrimeqProcessor::PrimeqProcessor()
         auto g = [&] (const char* k) { return apvts.getRawParameterValue (juce::String (bid (b, k))); };
         bp[(size_t) b] = { g ("on"), g ("type"), g ("freq"), g ("gain"), g ("q"), g ("slope"), g ("place"), g ("dyn"), g ("thr"), g ("range"), g ("ratio"), g ("attack"), g ("hold"), g ("release"), g ("knee"), g ("det"), g ("dir"), g ("ts") };
     }
-    pTsSep = apvts.getRawParameterValue ("ts_sep"); pTsSmooth = apvts.getRawParameterValue ("ts_smooth");
+    pTsSep = apvts.getRawParameterValue ("ts_sep"); pTsSmooth = apvts.getRawParameterValue ("ts_smooth"); pTsEngine = apvts.getRawParameterValue ("ts_engine");
     pPhase = apvts.getRawParameterValue ("phase"); pBypass = apvts.getRawParameterValue ("bypass"); pOut = apvts.getRawParameterValue ("out");
     pAuto = apvts.getRawParameterValue ("autogain"); pDelta = apvts.getRawParameterValue ("delta"); pScExt = apvts.getRawParameterValue ("scext");
     auto G = [&] (const char* k) { return apvts.getRawParameterValue (k); };
     pLook = G ("look"); pDhOn = G ("dh_on"); pDhAmt = G ("dh_amount"); pDhLo = G ("dh_lo"); pDhHi = G ("dh_hi"); pDhSens = G ("dh_sens"); pDhAtk = G ("dh_attack"); pDhRel = G ("dh_release"); pDhDelta = G ("dh_delta");
     pChMode = G ("ch_mode"); pChDrive = G ("ch_drive"); pChMix = G ("ch_mix"); pChOs = G ("ch_os"); pMorphOn = G ("morph_on"); pMorph = G ("morph");
     for (auto& d : dynTel) d.store (0.f);
-    for (const char* id : { "phase", "look", "dh_on", "ch_mode", "ch_os" }) apvts.addParameterListener (id, this);
+    for (const char* id : { "phase", "look", "dh_on", "ch_mode", "ch_os", "ts_engine" }) apvts.addParameterListener (id, this);
     mixSlotId = pq::MixRegistry::get().add (this);
     if (juce::MessageManager::getInstanceWithoutCreating() != nullptr) mixTimer.startTimer (150);
     worker = std::make_unique<FirWorker> (*this);
@@ -116,7 +117,7 @@ PrimeqProcessor::PrimeqProcessor()
 PrimeqProcessor::~PrimeqProcessor()
 {
     mixTimer.stopTimer(); pq::MixRegistry::get().remove (mixSlotId);
-    for (const char* id : { "phase", "look", "dh_on", "ch_mode", "ch_os" }) apvts.removeParameterListener (id, this);
+    for (const char* id : { "phase", "look", "dh_on", "ch_mode", "ch_os", "ts_engine" }) apvts.removeParameterListener (id, this);
     worker->stopThread (2000);
 }
 
@@ -137,11 +138,11 @@ int PrimeqProcessor::lookSamplesFor (int idx) const
 }
 int PrimeqProcessor::stageLatency (const Stage& st) const
 {
-    return (st.path ? firLatencyFor (sr) : 0) + st.look + (st.dh ? DeHarsh::kLatency : 0) + (st.os > 0 ? Oversampler::latencyFor (st.os) : 0);
+    return (st.path ? firLatencyFor (sr) : 0) + (st.spec && ! st.path ? pq::Hpss::kLatency : 0) + st.look + (st.dh ? DeHarsh::kLatency : 0) + (st.os > 0 ? Oversampler::latencyFor (st.os) : 0);
 }
 int PrimeqProcessor::declaredLatency() const
 {
-    Stage t; t.path = pPhase->load() > 0.5f ? 1 : 0; t.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); t.dh = pDhOn->load() > 0.5f;
+    Stage t; t.path = pPhase->load() > 0.5f ? 1 : 0; t.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); t.dh = pDhOn->load() > 0.5f; t.spec = pTsEngine->load() > 0.5f && t.path == 0;
     const int cm = (int) (pChMode->load() + 0.5f); t.os = cm > 0 ? (1 << std::clamp ((int) (pChOs->load() + 0.5f), 0, 2)) : 0;
     return stageLatency (t);
 }
@@ -171,7 +172,9 @@ void PrimeqProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         const juce::ScopedLock sl (firLock);
         sr = sampleRate; maxBlock = std::max (1, samplesPerBlock);
         { const juce::SpinLock::ScopedLockType xl (xfxLock); if (xlatDevice.load() > 0) xfx.setup (xlatDevice.load() - 1, sr); }
-        core.prepare (sr);
+        core.prepare (sr); coreT.prepare (sr); coreS.prepare (sr); hpss.prepare(); hpss.setSeparation (pTsSep->load() / 100.0);
+        for (auto& d : detDelay) d.prepare (pq::Hpss::kLatency + 8);
+        for (auto* v : { &xtL, &xtR, &xsL, &xsR, &dtL, &dtR, &cpL, &cpR }) v->assign ((size_t) kChunk, 0.0);
         for (auto* v : { &dL, &dR, &sL, &sR }) v->assign ((size_t) kChunk, 0.0);
         for (int c = 0; c < 2; ++c) { fIn[c].assign ((size_t) kChunk, 0.f); fOut[c].assign ((size_t) kChunk, 0.f); dryRing[c].assign ((size_t) kDryCap, 0.f); }
         for (auto* v : { &oL, &oR, &pL, &pR, &fTmp }) v->assign ((size_t) kChunk, 0.f);
@@ -185,7 +188,7 @@ void PrimeqProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         for (auto& v : scBuf) v.assign ((size_t) kChunk, 0.f);
         fadeGain = fadeTarget = 1.f; path = 0; primeLeft = 0; bypState = pBypass->load() > 0.5f ? 1.f : 0.f; gainState = 1.f; agState = 0.f;
         // arranca ja com a configuracao pedida: a latencia declarada e a real coincidem desde o primeiro bloco
-        applied = Stage(); applied.path = pPhase->load() > 0.5f ? 1 : 0; applied.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); applied.dh = pDhOn->load() > 0.5f;
+        applied = Stage(); applied.path = pPhase->load() > 0.5f ? 1 : 0; applied.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); applied.dh = pDhOn->load() > 0.5f; applied.spec = pTsEngine->load() > 0.5f && applied.path == 0;
         { const int cm = (int) (pChMode->load() + 0.5f); applied.os = cm > 0 ? (1 << std::clamp ((int) (pChOs->load() + 0.5f), 0, 2)) : 0; }
         if (applied.path == 1) applied.path = 0;    // o FIR so entra quando o desenho estiver pronto (transicao segura)
         procLat = stageLatency (applied);
@@ -261,7 +264,7 @@ void PrimeqProcessor::firProcess (double* L, double* R, int m)
 
 void PrimeqProcessor::resetChain()
 {
-    core.reset(); for (auto& c : conv) c.reset();
+    core.reset(); coreT.reset(); coreS.reset(); hpss.reset(); for (auto& d : detDelay) d.reset(); for (auto& c : conv) c.reset();
     std::fill (lkL.begin(), lkL.end(), 0.0); std::fill (lkR.begin(), lkR.end(), 0.0); lkW = 0;
     deharsh.reset();
     if (applied.os > 0) character.setup (CharMode::Clean, 0.0, 1.0, applied.os);
@@ -290,9 +293,12 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     core.setParams (bands);
     core.setListen (listenBand.load (std::memory_order_relaxed));
     core.setTransient (pTsSep->load() / 100.0, pTsSmooth->load());
+    BandParams bT[kNumBands], bS[kNumBands];            // motor espectral: cada fluxo recebe so as bandas que lhe cabem (ts: 0 ambos, 1 so T, 2 so S)
+    for (int b = 0; b < kNumBands; ++b) { bT[b] = bS[b] = bands[b]; bT[b].ts = bS[b].ts = 0; if (bands[b].ts == 2) bT[b].on = false; if (bands[b].ts == 1) bS[b].on = false; }
+    coreT.setParams (bT); coreS.setParams (bS); coreT.setListen (-1); coreS.setListen (-1); hpss.setSeparation (pTsSep->load() / 100.0);
     const int phaseIdx = std::clamp ((int) (pPhase->load() + 0.5f), 0, 2);
     const bool bypass = bandAbx ? false : (abxS == 1 ? true : (abxS == 2 ? false : pBypass->load() > 0.5f)), delta = pDelta->load() > 0.5f, autoG = pAuto->load() > 0.5f;
-    Stage tgt; tgt.path = phaseIdx != 0 ? 1 : 0; tgt.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); tgt.dh = pDhOn->load() > 0.5f;
+    Stage tgt; tgt.path = phaseIdx != 0 ? 1 : 0; tgt.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); tgt.dh = pDhOn->load() > 0.5f; tgt.spec = pTsEngine->load() > 0.5f && tgt.path == 0;
     const int chModeIdx = std::clamp ((int) (pChMode->load() + 0.5f), 0, 3);
     tgt.os = chModeIdx > 0 ? (1 << std::clamp ((int) (pChOs->load() + 0.5f), 0, 2)) : 0;
     const bool unlocked = AccessManager::get().isUnlocked();
@@ -372,7 +378,18 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
                 if (! scExt) { detL = uL.data(); detR = uR.data(); }
             }
 
-            if (path == 0) core.process (dL.data(), dR.data(), m, detL, detR, true);
+            if (path == 0 && applied.spec)
+            {
+                // detetor alinhado com o fluxo separado (atrasado kLatency): sidechain externo, sinal sem lookahead, ou o proprio programa
+                const double* d0 = detL ? detL : dL.data(); const double* d1 = detR ? detR : dR.data();
+                detDelay[0].process (d0, dtL.data(), m, pq::Hpss::kLatency); detDelay[1].process (d1, dtR.data(), m, pq::Hpss::kLatency);
+                hpss.process (dL.data(), dR.data(), m, xtL.data(), xtR.data(), xsL.data(), xsR.data());
+                coreT.process (xtL.data(), xtR.data(), m, dtL.data(), dtR.data(), true);
+                coreS.process (xsL.data(), xsR.data(), m, dtL.data(), dtR.data(), true);
+                for (int i = 0; i < m; ++i) { dL[(size_t) i] = xtL[(size_t) i] + xsL[(size_t) i]; dR[(size_t) i] = xtR[(size_t) i] + xsR[(size_t) i]; cpL[(size_t) i] = dtL[(size_t) i]; cpR[(size_t) i] = dtR[(size_t) i]; }
+                core.process (cpL.data(), cpR.data(), m, dtL.data(), dtR.data(), false);      // telemetria das dinamicas e compensacao automatica
+            }
+            else if (path == 0) core.process (dL.data(), dR.data(), m, detL, detR, true);
             else { core.process (dL.data(), dR.data(), m, detL, detR, false); firProcess (dL.data(), dR.data(), m); }
             if (applied.dh) { deharsh.process (dL.data(), dR.data(), m); dhRedDb.store ((float) deharsh.lastMaxReductionDb(), std::memory_order_relaxed); }
             if (applied.os > 0)

@@ -8,6 +8,7 @@
 //  sao tratados como ressonancias; material muito curto ou com pouca energia gera propostas pouco fiaveis.
 // =============================================================================
 #pragma once
+#include <array>
 #include <string>
 #include <algorithm>
 #include <cmath>
@@ -30,12 +31,13 @@ class Deresonate
 public:
     void begin (int fftBins, double sampleRate)
     {
-        bins = fftBins; fs = sampleRate; frames = 0; acc.assign ((size_t) bins, 0.0); hopSeconds = 0;
+        bins = fftBins; fs = sampleRate; frames = 0; acc.assign ((size_t) bins, 0.0); hopSeconds = 0; for (auto& a : half) a.assign ((size_t) bins, 0.0); fh[0] = fh[1] = 0;
     }
     void addPower (const float* pw, double secondsCovered)
     {
-        for (int k = 0; k < bins; ++k) acc[(size_t) k] += pw[k];
-        ++frames; hopSeconds += secondsCovered;
+        const int h = (int) (((long) hopSeconds) & 1L);                           // blocos alternados de 1 s (fiabilidade split-half)
+        for (int k = 0; k < bins; ++k) { acc[(size_t) k] += pw[k]; half[(size_t) h][(size_t) k] += pw[k]; }
+        ++frames; ++fh[h]; hopSeconds += secondsCovered;
     }
     double learnedSeconds() const { return hopSeconds; }
     // espectro medio de potencia (amplitude^2 por bin) — usado tambem pelo Reference Match
@@ -47,8 +49,39 @@ public:
     std::vector<DeresProposal> propose (double sensitivityDb = 4.0, double maxCutDb = 9.0, int maxBands = 8,
                                         double fmin = 80.0, double fmax = 16000.0) const
     {
+        if (! ready()) return {};
+        return proposeOn (acc, frames, sensitivityDb, maxCutDb, maxBands, fmin, fmax);
+    }
+    // metade h (0/1) do material, para medir a estabilidade das propostas
+    std::vector<DeresProposal> proposeHalf (int h, double sensitivityDb, double maxCutDb, int maxBands, double fmin = 80.0, double fmax = 16000.0) const
+    {
+        if (fh[h] < 2) return {};
+        return proposeOn (half[(size_t) h], fh[h], sensitivityDb, maxCutDb, maxBands, fmin, fmax);
+    }
+    int framesHalf (int h) const { return fh[h]; }
+    // forma espectral (dB, sem media de 100 Hz-10 kHz) de cada metade, em bins FFT — correlacao entre metades = fiabilidade para o Match
+    double halfCorrelation() const
+    {
+        if (fh[0] < 2 || fh[1] < 2 || bins < 16) return 0.0;
+        const int N = (bins - 1) * 2; const double binHz = fs / N; std::vector<double> a, b;
+        for (int k = 1; k < bins; ++k)
+        {
+            const double f = k * binHz; if (f < 100.0 || f > 10000.0) continue;
+            a.push_back (10.0 * std::log10 (std::max (1e-18, half[0][(size_t) k] / fh[0]))); b.push_back (10.0 * std::log10 (std::max (1e-18, half[1][(size_t) k] / fh[1])));
+        }
+        return pearson (a, b);
+    }
+    static double pearson (const std::vector<double>& a, const std::vector<double>& b)
+    {
+        const size_t n = std::min (a.size(), b.size()); if (n < 3) return 0.0;
+        double ma = 0, mb = 0; for (size_t i = 0; i < n; ++i) { ma += a[i]; mb += b[i]; } ma /= n; mb /= n;
+        double sab = 0, saa = 0, sbb = 0; for (size_t i = 0; i < n; ++i) { sab += (a[i] - ma) * (b[i] - mb); saa += (a[i] - ma) * (a[i] - ma); sbb += (b[i] - mb) * (b[i] - mb); }
+        return saa > 1e-12 && sbb > 1e-12 ? std::clamp (sab / std::sqrt (saa * sbb), 0.0, 1.0) : 0.0;
+    }
+private:
+    std::vector<DeresProposal> proposeOn (const std::vector<double>& acc, int frames, double sensitivityDb, double maxCutDb, int maxBands, double fmin, double fmax) const
+    {
         std::vector<DeresProposal> out;
-        if (! ready()) return out;
         const int N = (bins - 1) * 2; const double binHz = fs / N;
         std::vector<double> db ((size_t) bins);
         for (int k = 0; k < bins; ++k) db[(size_t) k] = 10.0 * std::log10 (std::max (1e-18, acc[(size_t) k] / frames));
@@ -96,7 +129,6 @@ public:
         std::sort (out.begin(), out.end(), [] (const DeresProposal& x, const DeresProposal& y) { return x.freq < y.freq; });
         return out;
     }
-private:
-    int bins = 0, frames = 0; double fs = 48000, hopSeconds = 0; std::vector<double> acc;
+    int bins = 0, frames = 0; double fs = 48000, hopSeconds = 0; std::vector<double> acc; std::array<std::vector<double>, 2> half; int fh[2] = { 0, 0 };
 };
 } // namespace pq
