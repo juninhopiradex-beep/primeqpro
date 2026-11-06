@@ -8,7 +8,7 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
       login ([this] { timerCallback(); })
 {
     if (AccessManager::get().pccConfigured()) juce::Thread::launch ([] { AccessManager::get().revalidatePcc(); });   // 1x/dia, em segundo plano
-    setLookAndFeel (&lnf);
+    openEditors().push_back (this); setLookAndFeel (&lnf);
     addAndMakeVisible (graph); addAndMakeVisible (band); addAndMakeVisible (strip); addAndMakeVisible (fx); addChildComponent (smart); addChildComponent (mix); addAndMakeVisible (mixBtn); addAndMakeVisible (modeBox); modeBox.addItem ("Simple", 1); modeBox.addItem ("Advanced", 2); modeBox.addItem ("Expert", 3); modeBox.setSelectedId (proc.uiMode + 1, juce::dontSendNotification); modeBox.onChange = [this] { proc.uiMode = modeBox.getSelectedId() - 1; applyMode(); }; modeBox.setTooltip (pqui::T8 ("Simple: essencial · Advanced: tudo · Expert: + cenários e relatório"));
     for (auto* b : { &presetBtn, &undoBtn, &redoBtn, &abBtn, &logoutBtn }) addAndMakeVisible (b);
     addAndMakeVisible (bypassBtn); addAndMakeVisible (smartBtn); addAndMakeVisible (phaseBox); addAndMakeVisible (phaseLbl);
@@ -25,9 +25,11 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     graph.onSelect = [this] (int b) { band.bind (b); };
     mix.onZones = [this] (const std::vector<OverlayZone>& z) { graph.setZones (z); zonesBtn.setVisible (! z.empty() || true); };
     addChildComponent (guide); guide.onClose = [] { AccessManager::get().setOnboardingSeen(); };
+    addAndMakeVisible (skinBtn); skinBtn.setButtonText (pqui::skinName (shownSkin)); skinBtn.setTooltip (juce::String (juce::CharPointer_UTF8 ("Cor / skin: Prime, Ouro, \xC3\x8D""ndigo (seguro para daltonismo)")));
+    skinBtn.onClick = [this] { changeSkin ((pqui::skinIndex() + 1) % 3); };
     addAndMakeVisible (langBtn); langBtn.onClick = [this] { setLanguage (pqui::i18n::lang().load() == 0 ? 1 : 0); };
     addAndMakeVisible (helpBtn); helpBtn.setTooltip (pqui::T8 ("Guia rápido")); helpBtn.onClick = [this] { guide.open(); resized(); };
-    addChildComponent (studio); addAndMakeVisible (studioBtn); studioBtn.setTooltip ("Alvo por gÃ©nero, Tradutor, Palavras, Cofre de decisÃµ""es e Ensino"); studioBtn.onClick = [this] { showStudio (studioBtn.getToggleState()); };
+    addChildComponent (studio); addAndMakeVisible (studioBtn); studioBtn.setTooltip (juce::String (juce::CharPointer_UTF8 ("Alvo por g\xC3\xA9nero, Tradutor, Palavras, Cofre de decis\xC3\xB5""es e Ensino"))); studioBtn.onClick = [this] { showStudio (studioBtn.getToggleState()); };
     addChildComponent (abx); addAndMakeVisible (abxBtn); abxBtn.setTooltip ("Teste ABX cego: original vs processado, loudness igualado"); abxBtn.onClick = [this] { showAbx (abxBtn.getToggleState()); };
     addAndMakeVisible (zonesBtn); zonesBtn.setToggleState (true, juce::dontSendNotification); zonesBtn.setTooltip (pqui::T8 ("Mostra no gráfico as zonas de masking e espaço detectadas pelo Assistente")); zonesBtn.onClick = [this] { graph.showZones = zonesBtn.getToggleState(); graph.repaint(); };
     addChildComponent (login); wasUnlocked = AccessManager::get().isUnlocked(); login.setVisible (! wasUnlocked); lastSel = 0; logoutBtn.setVisible (wasUnlocked && ! AccessManager::inTrial());
@@ -39,12 +41,16 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     startTimerHz (30);
 }
 
-PrimeqEditor::~PrimeqEditor() { stopTimer(); proc.listenBand.store (-1); setLookAndFeel (nullptr); }
+PrimeqEditor::~PrimeqEditor() { stopTimer(); { auto& v = openEditors(); v.erase (std::remove (v.begin(), v.end(), this), v.end()); } proc.listenBand.store (-1); setLookAndFeel (nullptr); }
 
 void PrimeqEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (kBg);
-    g.setGradientFill (juce::ColourGradient (kTeal, 18.f, 8.f, juce::Colour (0xffe6e9ec), 190.f, 8.f, false));
+    g.setGradientFill (juce::ColourGradient (kBg.brighter (0.05f), 0.f, 0.f, kBg.darker (0.25f), 0.f, (float) getHeight(), false)); g.fillAll();
+    { g.setGradientFill (juce::ColourGradient (kPanel2.withAlpha (0.9f), 0.f, 0.f, kBg.withAlpha (0.f), 0.f, 46.f, false)); g.fillRect (0, 0, getWidth(), 46);
+      g.setGradientFill (juce::ColourGradient (kTeal.withAlpha (0.0f), 0.f, 0.f, kTeal.withAlpha (0.0f), (float) getWidth(), 0.f, false));
+      juce::ColourGradient ln (kTeal.withAlpha (0.0f), 0.f, 0.f, kTeal.withAlpha (0.0f), (float) getWidth(), 0.f, false); ln.addColour (0.12, kTeal.withAlpha (0.75f)); ln.addColour (0.5, kTeal.withAlpha (0.18f));
+      g.setGradientFill (ln); g.fillRect (0.f, 45.f, (float) getWidth(), 1.5f); }
+    g.setGradientFill (juce::ColourGradient (kTeal, 18.f, 8.f, kText, 190.f, 8.f, false));
     g.setFont (fontOf (22.f, true)); g.drawText ("PRIMEQ PRO", 16, 6, 150, 34, juce::Justification::centredLeft);
     g.setColour (kDim); g.setFont (fontOf (11.f)); g.drawText ("by Piradex", 138, 12, 80, 28, juce::Justification::centredLeft);
     g.setColour (kDim); g.setFont (fontOf (11.f));
@@ -58,7 +64,7 @@ void PrimeqEditor::resized()
     head.removeFromLeft (220);
     presetBtn.setBounds (head.removeFromLeft (140)); head.removeFromLeft (6);
     undoBtn.setBounds (head.removeFromLeft (52)); head.removeFromLeft (4); redoBtn.setBounds (head.removeFromLeft (52)); head.removeFromLeft (6); abBtn.setBounds (head.removeFromLeft (38));
-    langBtn.setBounds (head.removeFromRight (40)); head.removeFromRight (6); logoutBtn.setBounds (head.removeFromRight (54)); head.removeFromRight (6); helpBtn.setBounds (head.removeFromRight (30)); head.removeFromRight (6); smartBtn.setBounds (head.removeFromRight (88)); head.removeFromRight (4); studioBtn.setBounds (head.removeFromRight (78)); head.removeFromRight (4); mixBtn.setBounds (head.removeFromRight (96)); head.removeFromRight (4); zonesBtn.setBounds (head.removeFromRight (62)); head.removeFromRight (4); abxBtn.setBounds (head.removeFromRight (46)); head.removeFromRight (4); modeBox.setBounds (head.removeFromRight (84)); head.removeFromRight (4); bypassBtn.setBounds (head.removeFromRight (76)); head.removeFromRight (6);
+    langBtn.setBounds (head.removeFromRight (40)); head.removeFromRight (4); skinBtn.setBounds (head.removeFromRight (62)); head.removeFromRight (6); logoutBtn.setBounds (head.removeFromRight (54)); head.removeFromRight (6); helpBtn.setBounds (head.removeFromRight (30)); head.removeFromRight (6); smartBtn.setBounds (head.removeFromRight (88)); head.removeFromRight (4); studioBtn.setBounds (head.removeFromRight (78)); head.removeFromRight (4); mixBtn.setBounds (head.removeFromRight (96)); head.removeFromRight (4); zonesBtn.setBounds (head.removeFromRight (62)); head.removeFromRight (4); abxBtn.setBounds (head.removeFromRight (46)); head.removeFromRight (4); modeBox.setBounds (head.removeFromRight (84)); head.removeFromRight (4); bypassBtn.setBounds (head.removeFromRight (76)); head.removeFromRight (6);
     phaseBox.setBounds (head.removeFromRight (110)); phaseLbl.setBounds (head.removeFromRight (34));
     r.removeFromTop (6);
     r.removeFromBottom (14);

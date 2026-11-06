@@ -124,8 +124,8 @@ public:
                 const double v = stDev[(size_t) b]; if (v < -119.0 || v > 119.0) continue; const float x = xOf (pq::mixBandFreq (b)), y = yOf (juce::jlimit (-rangeDb, rangeDb, v));
                 if (! st) { line.startNewSubPath (x, y); fill.startNewSubPath (x, yOf (0.0)); fill.lineTo (x, y); st = true; } else { line.lineTo (x, y); fill.lineTo (x, y); } lx = x;
             }
-            if (st) { fill.lineTo (lx, yOf (0.0)); fill.closeSubPath(); g.setColour (juce::Colour (0xffe0a458).withAlpha (0.16f)); g.fillPath (fill); g.setColour (juce::Colour (0xffe0a458).withAlpha (0.95f)); g.strokePath (line, juce::PathStrokeType (1.8f));
-                      g.setFont (fontOf (9.5f)); g.setColour (juce::Colour (0xffe0a458)); g.drawText (T8 ("ALVO: pista − alvo (acima = excesso)"), (int) p.getX() + 6, (int) p.getY() + 4, 320, 12, juce::Justification::topLeft, false); }
+            if (st) { fill.lineTo (lx, yOf (0.0)); fill.closeSubPath(); g.setColour (kWarn.withAlpha (0.16f)); g.fillPath (fill); g.setColour (kWarn.withAlpha (0.95f)); g.strokePath (line, juce::PathStrokeType (1.8f));
+                      g.setFont (fontOf (9.5f)); g.setColour (kWarn); g.drawText (T8 ("ALVO: pista − alvo (acima = excesso)"), (int) p.getX() + 6, (int) p.getY() + 4, 320, 12, juce::Justification::topLeft, false); }
         }
 
         // curvas individuais (a partir dos coeficientes) e total
@@ -147,7 +147,8 @@ public:
             g.setColour (col.withAlpha (sel ? 0.95f : 0.38f)); g.strokePath (bp, juce::PathStrokeType (sel ? 1.8f : 1.1f));
         }
         { juce::Path tp; for (int i = 0; i <= npts; ++i) { const float x = p.getX() + p.getWidth() * i / npts, y = yOf (total[(size_t) i]); if (i == 0) tp.startNewSubPath (x, y); else tp.lineTo (x, y); }
-          g.setColour (juce::Colours::white.withAlpha (0.92f)); g.strokePath (tp, juce::PathStrokeType (2.f)); }
+          g.setColour (kTeal.withAlpha (0.14f)); g.strokePath (tp, juce::PathStrokeType (6.f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+          g.setColour (juce::Colours::white.withAlpha (0.94f)); g.strokePath (tp, juce::PathStrokeType (2.f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded)); }
 
         // pre-visualizacao Smart Ops (tracejada): soma das propostas, calculada com os mesmos filtros
         if (showPreview && ! preview.empty())

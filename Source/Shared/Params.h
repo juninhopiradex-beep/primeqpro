@@ -47,5 +47,6 @@ struct BandParams
     double    kneeDb = 6.0;
     DetMode   det = DetMode::Peak;
     DynDir    dir = DynDir::Above;
+    int       ts = 0;                       // alvo Transiente/Tonal: 0 = Ambos, 1 = so transientes, 2 = so tonal
 };
 } // namespace pq

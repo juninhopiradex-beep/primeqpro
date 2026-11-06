@@ -578,6 +578,36 @@ int main()
         // ensino
         { pq::BandParams b; b.on = true; b.freq = 300; b.gain = -3; const auto pt = explainBand (b, false), en = explainBand (b, true); CHECK (pt.find ("lama") != std::string::npos && en.find ("mud") != std::string::npos, "Studio: explicacao PT/EN da banda 300 Hz"); }
     }
+    // EQ Transiente/Tonal: banda Bell -12 dB larga; seno estavel vs rajadas de ruido
+    {
+        auto run = [] (int ts, bool burst, std::vector<double>& outL, std::vector<double>& inL)
+        {
+            Rig r; auto& b = r.b[0]; b.on = true; b.type = BandType::Bell; b.freq = 2500; b.gain = -12; b.q = 0.4; b.ts = ts;
+            r.eq.setTransient (0.6, 8.0);
+            const size_t n = (size_t) (FS * 2.0); std::vector<double> L (n), R (n); std::mt19937 g (7); std::uniform_real_distribution<double> u (-1.0, 1.0);
+            for (size_t i = 0; i < n; ++i)
+            {
+                double x = burst ? 0.0 : 0.25 * std::sin (2.0 * M_PI * 2500.0 * (double) i / FS);
+                if (burst) { const size_t ph = i % (size_t) (FS * 0.25); if (ph < (size_t) (FS * 0.003)) x = 0.6 * std::sin (2.0 * M_PI * 2500.0 * (double) i / FS) * (0.5 + 0.5 * u (g)); }
+                L[i] = R[i] = x;
+            }
+            inL = L; r.push();
+            for (size_t off = 0; off < n; off += 512) { const int m = (int) std::min<size_t> (512, n - off); r.eq.process (L.data() + off, R.data() + off, m, nullptr, nullptr, true); }
+            outL = L;
+        };
+        std::vector<double> o, in;
+        run (0, false, o, in); const double both = rmsDb (o, 48000) - rmsDb (in, 48000);
+        run (1, false, o, in); const double trS = rmsDb (o, 48000) - rmsDb (in, 48000);
+        run (2, false, o, in); const double toS = rmsDb (o, 48000) - rmsDb (in, 48000);
+        CHECK (both < -10.0 && trS > -2.0 && toS < -9.0, "T/S: seno estavel — Ambos %.1f dB, so-Transiente %.1f dB (quase nada), so-Tonal %.1f dB", both, trS, toS);
+        auto burstDb = [&] (const std::vector<double>& a, const std::vector<double>& i0) { double ea = 0, ei = 0; for (size_t k = 0; k < a.size(); ++k) { if (k < 48000) continue; const size_t ph = k % (size_t) (FS * 0.25); if (ph < (size_t) (FS * 0.006)) { ea += a[k] * a[k]; ei += i0[k] * i0[k]; } } return 10.0 * std::log10 (std::max (1e-30, ea) / std::max (1e-30, ei)); };
+        run (1, true, o, in); const double bT = burstDb (o, in); run (2, true, o, in); const double bS = burstDb (o, in); run (0, true, o, in); const double bB = burstDb (o, in);
+        CHECK (bT < bS - 4.0 && bS > bB + 4.0, "T/S: rajadas — so-Transiente %.1f dB, so-Tonal %.1f dB, Ambos %.1f dB (Tonal poupa as rajadas)", bT, bS, bB);
+        // sem ts nada muda face ao caminho anterior (ts=0 e idêntico)
+        { Rig a, c; a.b[0].on = c.b[0].on = true; a.b[0].gain = c.b[0].gain = 5; c.b[0].ts = 0; std::vector<double> x (4096), y (4096), x2, y2; for (size_t i = 0; i < 4096; ++i) x[i] = y[i] = 0.3 * std::sin (0.05 * (double) i); x2 = x; y2 = y;
+          a.push(); c.push(); a.eq.process (x.data(), x2.data(), 4096, nullptr, nullptr, true); c.eq.process (y.data(), y2.data(), 4096, nullptr, nullptr, true); double d = 0; for (size_t i = 0; i < 4096; ++i) d = std::max (d, std::fabs (x[i] - y[i]));
+          CHECK (d == 0.0, "T/S: ts=Ambos e bit-identico ao caminho normal"); }
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }

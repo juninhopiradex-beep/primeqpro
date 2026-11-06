@@ -5,6 +5,7 @@
 //  A verificacao e lenta de proposito: nunca chamar na thread de audio nem na de mensagens.
 // =============================================================================
 #pragma once
+#include <algorithm>
 #include <juce_core/juce_core.h>
 #include <juce_data_structures/juce_data_structures.h>
 #include <atomic>
@@ -39,6 +40,8 @@ public:
     // idioma da interface: 0 = PT, 1 = EN. Sem valor guardado, segue o idioma do sistema (pt* -> PT, resto -> EN).
     int language() const { const auto v = props->getIntValue ("lang", -1); if (v == 0 || v == 1) return v; return juce::SystemStats::getUserLanguage().startsWithIgnoreCase ("pt") ? 0 : 1; }
     void setLanguage (int l) { props->setValue ("lang", l == 1 ? 1 : 0); props->saveIfNeeded(); }
+    int skin() const { return std::clamp (props->getIntValue ("skin", 0), 0, 2); }
+    void setSkin (int i) { props->setValue ("skin", std::clamp (i, 0, 2)); props->saveIfNeeded(); }
     void setOnboardingSeen() { props->setValue ("onboardDone", true); props->saveIfNeeded(); }
     int  today() const;                                              // dia atual, com guarda contra recuo do relógio
 

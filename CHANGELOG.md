@@ -1,4 +1,11 @@
 # Changelog
+## 1.7.0 — PRIME
+- **Skins**: botão de cor no topo alterna entre **PRIME** (grafite + teal), **OURO** (grafite quente + dourado) e **ÍNDIGO** (azul/laranja da paleta Okabe-Ito, seguro para daltonismo). Aplica-se logo, fica guardado e segue todas as instâncias abertas.
+- Polimento visual: cabeçalho com gradiente e linha de acento, botões e potenciómetros com relevo e brilho, curva total com halo, dicas na cor da skin.
+- **EQ Transiente / Tonal por banda**: cada banda pode atuar em *Both*, só nos *Transient* (ataques) ou só no *Tonal* (parte sustentada). Máscara complementar (mT + mS = 1), sem latência extra, com *T/S Separation* e *T/S Smooth* globais. Funciona em Zero Latency (em Natural/Linear Phase as bandas T/S atuam como Both). Com lookahead ligado, a máscara vê o sinal sem atraso. Medido: um seno estável passa intacto numa banda Transient (0,0 dB) e é cortado 12 dB numa banda Tonal.
+- **Smart Ops com modos**: *Analisar* (só evidências, nada é aplicado), *Assistir* (pré-visualiza, você aplica), *Auto (opt-in)* (aplica ao parar o Learn só com confiança média/alta; Revert desfaz). Cada proposta mostra confiança (material recolhido vs necessário) e risco. Determinístico: não há IA nem rede.
+- Corrigido: dica do botão STUDIO aparecia com acentos estragados.
+- Limites assumidos: a máscara T/S é um detetor de envelope (não uma separação espectral STFT); Vozes com vibrato forte ou materiais muito densos podem dar falsos "transientes". Vistas 3D e multi-instância coletiva da especificação ficam para versões futuras.
 ## 1.6.0 — STUDIO
 - Novo painel **STUDIO** (botão no topo): **ALVO** (curvas-alvo por género: Kizomba, Semba, Kuduro, Amapiano, Afrobeat, Hip-Hop, Trap, Pop, Rock, Eletrónica, Voz; ajustáveis; "gravar a minha"; desvio desenhado no gráfico; propor/aplicar bandas; sugerir o preset de fábrica mais próximo), **TRADUTOR** (telemóvel, colunas pequenas, auriculares, carro, mono: o que desaparece, e "ouvir assim"), **PALAVRAS** (ex.: "menos lama, mais presença", PT/EN, com pré-visualização), **COFRE** (decisões com motivo, restauro por etapas, ficha bilingue em HTML, enviar a assinatura para outras pistas) e **ENSINO** (explica ao vivo o que cada banda faz).
 - **ABX por banda**: testa às cegas só uma banda (A = sem a banda, B = com a banda) com o nível igualado.

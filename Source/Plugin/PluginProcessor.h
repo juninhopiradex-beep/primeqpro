@@ -120,6 +120,7 @@ public:
     std::atomic<float> dhRedDb { 0.f };
     std::atomic<int>   abxSide { 0 };                                  // ABX: 0 normal, 1 = A (original), 2 = B (processado)
     std::atomic<float> abxComp { 1.f };                                // ganho linear aplicado ao lado B (loudness igualado)
+    float transientNow() const { return core.transientNow(); }      // atividade da mascara T/S (0..1), para o GUI
     std::atomic<float> loudDeltaDb { 0.f };                          // nivel RMS pos - pre (media ~1.5 s), para A/B a loudness igualado
     int uiMode = 1;                                                  // 0 Simple, 1 Advanced, 2 Expert                              // reducao maxima atual do De-harsh (dB, <= 0)
     int  latencyFor (int phaseIdx) const;                            // so a parte da fase (compat.)
@@ -138,8 +139,9 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     void migrateState (juce::ValueTree& vt, int fromVersion);
 
-    struct BandPtrs { std::atomic<float> *on, *type, *freq, *gain, *q, *slope, *place, *dyn, *thr, *range, *ratio, *attack, *hold, *release, *knee, *det, *dir; };
+    struct BandPtrs { std::atomic<float> *on, *type, *freq, *gain, *q, *slope, *place, *dyn, *thr, *range, *ratio, *attack, *hold, *release, *knee, *det, *dir, *ts; };
     std::array<BandPtrs, pq::kNumBands> bp {};
+    std::atomic<float> *pTsSep = nullptr, *pTsSmooth = nullptr;
     std::atomic<float> *pPhase = nullptr, *pBypass = nullptr, *pOut = nullptr, *pAuto = nullptr, *pDelta = nullptr, *pScExt = nullptr;
     std::atomic<float> *pLook = nullptr, *pDhOn = nullptr, *pDhAmt = nullptr, *pDhLo = nullptr, *pDhHi = nullptr, *pDhSens = nullptr, *pDhAtk = nullptr, *pDhRel = nullptr, *pDhDelta = nullptr;
     std::atomic<float> *pChMode = nullptr, *pChDrive = nullptr, *pChMix = nullptr, *pChOs = nullptr, *pMorphOn = nullptr, *pMorph = nullptr;

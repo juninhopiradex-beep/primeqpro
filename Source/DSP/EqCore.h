@@ -12,6 +12,7 @@
 #pragma once
 #include "BandDesign.h"
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <vector>
 
@@ -29,12 +30,15 @@ public:
         rmsK    = 1.0 - std::exp (-1.0 / (fs * 0.010));
         for (auto& r : rt) r = BandRt();
         for (auto& s : lsn) s = BiquadState();
-        lsnKey = -1;
+        lsnKey = -1; tsFast = tsSlow = tsM = 0;
     }
     void reset() { for (auto& r : rt) r.resetStates(); for (auto& s : lsn) s = BiquadState(); }
 
     void setParams (const BandParams* p) { for (int i = 0; i < kNumBands; ++i) params[(size_t) i] = p[i]; }
     void setListen (int band) { listen = band; }
+    // EQ Transiente/Tonal: mascara complementar mT + mS = 1 (zero latencia). sep 0..1 = rigidez da fronteira; smoothMs = libertacao da mascara
+    void setTransient (double sep, double smoothMs) { tsSep = clampd (sep, 0.0, 1.0); tsSmoothMs = clampd (smoothMs, 1.0, 100.0); }
+    float transientNow() const { return tsNow.load (std::memory_order_relaxed); }
 
     // L/R processados no lugar. scL/scR: sidechain externo (nullptr = interno). filtering=false: so atualiza as dinamicas.
     void process (double* L, double* R, int n, const double* scL, const double* scR, bool filtering)
@@ -53,6 +57,10 @@ public:
             const bool doListen = filtering && listen >= 0 && params[(size_t) listen].on;
             if (doListen) for (int i = 0; i < m; ++i) { lsrcL[i] = l[i]; lsrcR[i] = r[i]; }
 
+            bool anyTs = false;
+            for (int b = 0; b < kNumBands; ++b) if (params[(size_t) b].on && params[(size_t) b].ts != 0) { anyTs = true; break; }
+            double mT[kSub];
+            if (anyTs) tsMask (srcL, srcR, m, mT);
             for (int b = 0; b < kNumBands; ++b)
             {
                 const BandParams& p = params[(size_t) b]; BandRt& rb = rt[(size_t) b];
@@ -76,7 +84,14 @@ public:
                     rb.remember (p, gEff);
                 }
                 if (! filtering) continue;
-                filterBand (rb, p.place, l, r, m);
+                if (p.ts != 0 && anyTs)
+                {
+                    // o filtro corre sempre sobre o sinal completo (estados coerentes); so o resultado e misturado com a mascara
+                    double a0[kSub], b0[kSub]; for (int i = 0; i < m; ++i) { a0[i] = l[i]; b0[i] = r[i]; }
+                    filterBand (rb, p.place, l, r, m);
+                    for (int i = 0; i < m; ++i) { const double w = p.ts == 1 ? mT[i] : 1.0 - mT[i]; l[i] = a0[i] + w * (l[i] - a0[i]); r[i] = b0[i] + w * (r[i] - b0[i]); }
+                }
+                else filterBand (rb, p.place, l, r, m);
             }
             if (doListen) listenOut (lsrcL, lsrcR, l, r, m);
         }
@@ -185,6 +200,27 @@ private:
         if (std::fabs (r.env) < 1e-6) r.env = 0.0;
     }
 
+    // detetor de transientes: envelope rapido (|x|, 0.2 ms / 20 ms) contra uma versao lenta dele (50 ms); a diferenca em dB, com limiar e
+    // largura dependentes de "separation", da a mascara 0..1, suavizada (subida 0.5 ms, descida = smooth)
+    void tsMask (const double* sl, const double* sr, int m, double* out)
+    {
+        const double ka = 1.0 - std::exp (-1.0 / (0.0002 * fs)), kr = 1.0 - std::exp (-1.0 / (0.020 * fs)), ks = 1.0 - std::exp (-1.0 / (0.050 * fs));
+        const double mUp = 1.0 - std::exp (-1.0 / (0.0005 * fs)), mDn = 1.0 - std::exp (-1.0 / (tsSmoothMs * 0.001 * fs));
+        const double c = 6.0 - 4.5 * tsSep, w = 12.0 - 9.0 * tsSep;
+        double acc = 0;
+        for (int i = 0; i < m; ++i)
+        {
+            const double a = std::fabs (0.5 * (sl[i] + sr[i]));
+            tsFast += (a - tsFast) * (a > tsFast ? ka : kr);
+            tsSlow += (tsFast - tsSlow) * ks;
+            const double d = 20.0 * std::log10 ((tsFast + 1e-7) / (tsSlow + 1e-7));
+            double t = clampd ((d - c) / w, 0.0, 1.0); t = t * t * (3.0 - 2.0 * t);
+            tsM += (t - tsM) * (t > tsM ? mUp : mDn);
+            out[i] = tsM; acc += tsM;
+        }
+        tsNow.store ((float) (acc / std::max (1, m)), std::memory_order_relaxed);
+    }
+
     void filterBand (BandRt& r, Placement pl, double* l, double* rr, int m)
     {
         const int N = r.casc.n;
@@ -228,6 +264,7 @@ private:
     }
 
     double fs = 48000, smoothK = 0.1, rmsK = 0.01;
+    double tsSep = 0.6, tsSmoothMs = 8.0, tsFast = 0, tsSlow = 0, tsM = 0; std::atomic<float> tsNow { 0.f };
     std::array<BandParams, kNumBands> params {};
     std::array<BandRt, kNumBands> rt {};
     int listen = -1, lsnKey = -1; Coefs lsc; BiquadState lsn[2];

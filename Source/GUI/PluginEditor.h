@@ -79,7 +79,8 @@ public:
         fill (typeBox, { "Bell", "Low Shelf", "High Shelf", "High Pass", "Low Pass", "Notch", "Band Pass", "All Pass" });
         fill (placeBox, { "Stereo", "Left", "Right", "Mid", "Side" });
         fill (slopeBox, { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct", "36 dB/oct", "48 dB/oct", "72 dB/oct", "96 dB/oct", "Brickwall" });
-        fill (detBox, { "Peak", "RMS" }); fill (dirBox, { "Above", "Below" });
+        fill (detBox, { "Peak", "RMS" }); fill (dirBox, { "Above", "Below" }); fill (tsBox, { "Both", "Transient", "Tonal" });
+        tsBox.setTooltip (T8 ("Em que parte do sinal esta banda atua: Both = tudo; Transient = só ataques; Tonal = só a parte sustentada. Máscara complementar, sem latência extra (Zero Latency)."));
         for (auto* b : { &onBtn, &dynBtn, &listenBtn }) addAndMakeVisible (b);
         for (auto* b : { &copyBtn, &pasteBtn, &delBtn }) addAndMakeVisible (b);
         listenBtn.onClick = [this] { proc.listenBand.store (listenBtn.getToggleState() ? band : -1); };
@@ -100,7 +101,7 @@ public:
         }
         auto A = [&] (std::unique_ptr<ComboAtt>& a, juce::ComboBox& c, const char* k) { a.reset(); a = std::make_unique<ComboAtt> (proc.apvts, juce::String (pq::bid (b, k)), c); };
         auto Bt = [&] (std::unique_ptr<ButtonAtt>& a, juce::Button& c, const char* k) { a.reset(); a = std::make_unique<ButtonAtt> (proc.apvts, juce::String (pq::bid (b, k)), c); };
-        A (aType, typeBox, "type"); A (aPlace, placeBox, "place"); A (aSlope, slopeBox, "slope"); A (aDet, detBox, "det"); A (aDir, dirBox, "dir");
+        A (aTs, tsBox, "ts"); A (aType, typeBox, "type"); A (aPlace, placeBox, "place"); A (aSlope, slopeBox, "slope"); A (aDet, detBox, "det"); A (aDir, dirBox, "dir");
         Bt (aOn, onBtn, "on"); Bt (aDyn, dynBtn, "dyn");
         listenBtn.setToggleState (proc.listenBand.load() == b, juce::dontSendNotification);
         refresh(); repaint();
@@ -120,11 +121,11 @@ public:
     {
         auto r = getLocalBounds().reduced (10, 6); auto top = r.removeFromTop (28);
         onBtn.setBounds (top.removeFromLeft (46)); top.removeFromLeft (14);
-        top.removeFromLeft (70); typeBox.setBounds (top.removeFromLeft (112)); top.removeFromLeft (6);
-        placeBox.setBounds (top.removeFromLeft (84)); top.removeFromLeft (6);
-        slopeBox.setBounds (top.removeFromLeft (104)); top.removeFromLeft (14);
-        dynBtn.setBounds (top.removeFromLeft (52)); top.removeFromLeft (6); detBox.setBounds (top.removeFromLeft (70)); top.removeFromLeft (6); dirBox.setBounds (top.removeFromLeft (78));
-        delBtn.setBounds (top.removeFromRight (64)); top.removeFromRight (6); pasteBtn.setBounds (top.removeFromRight (56)); top.removeFromRight (6); copyBtn.setBounds (top.removeFromRight (62)); top.removeFromRight (6); listenBtn.setBounds (top.removeFromRight (64));
+        top.removeFromLeft (70); typeBox.setBounds (top.removeFromLeft (100)); top.removeFromLeft (6);
+        placeBox.setBounds (top.removeFromLeft (74)); top.removeFromLeft (6);
+        slopeBox.setBounds (top.removeFromLeft (96)); top.removeFromLeft (14);
+        dynBtn.setBounds (top.removeFromLeft (52)); top.removeFromLeft (6); detBox.setBounds (top.removeFromLeft (62)); top.removeFromLeft (6); dirBox.setBounds (top.removeFromLeft (70));
+        delBtn.setBounds (top.removeFromRight (56)); top.removeFromRight (5); pasteBtn.setBounds (top.removeFromRight (50)); top.removeFromRight (5); copyBtn.setBounds (top.removeFromRight (54)); top.removeFromRight (5); listenBtn.setBounds (top.removeFromRight (60)); top.removeFromRight (10); tsBox.setBounds (top.removeFromRight (92));
         r.removeFromTop (4);
         const int n = 10, w = r.getWidth() / n; int x = r.getX();
         for (auto* k : { &freq, &gain, &q, &thr, &range, &ratio, &attack, &hold, &release, &knee })
@@ -145,8 +146,8 @@ private:
     Knob freq, gain, q, thr, range, ratio, attack, hold, release, knee;
     juce::ToggleButton onBtn { "ON" }, dynBtn { "DYN" }, listenBtn { "LISTEN" };
     juce::TextButton copyBtn { "Copiar" }, pasteBtn { "Colar" }, delBtn { "Apagar" };
-    juce::ComboBox typeBox, placeBox, slopeBox, detBox, dirBox;
-    std::unique_ptr<ComboAtt> aType, aPlace, aSlope, aDet, aDir; std::unique_ptr<ButtonAtt> aOn, aDyn;
+    juce::ComboBox typeBox, placeBox, slopeBox, detBox, dirBox, tsBox;
+    std::unique_ptr<ComboAtt> aTs, aType, aPlace, aSlope, aDet, aDir; std::unique_ptr<ButtonAtt> aOn, aDyn;
 };
 
 // ------------------------------------------------------------------------------------------ seccao global
@@ -178,7 +179,7 @@ public:
     {
         meter.tick();
         const double fs = proc.sampleRateNow(); const int lat = proc.currentLatency();
-        info.setText (T8 ("Latencia ") + juce::String (lat) + " smp (" + juce::String (1000.0 * lat / fs, 1) + " ms)    CPU " + juce::String (proc.cpuLoad.load() * 100.f, 1) + " %", juce::dontSendNotification);
+        info.setText (T8 ("Latencia ") + juce::String (lat) + " smp (" + juce::String (1000.0 * lat / fs, 1) + " ms)    CPU " + juce::String (proc.cpuLoad.load() * 100.f, 1) + " %" + (tsUsed() ? "    T/S " + juce::String ((int) std::lround (proc.transientNow() * 100.f)) + " %" : juce::String()), juce::dontSendNotification);
     }
     void resized() override
     {
@@ -195,6 +196,7 @@ public:
     }
     void paint (juce::Graphics& g) override { g.setColour (pqui::kPanel); g.fillRoundedRectangle (getLocalBounds().toFloat(), 8.f); }
 private:
+    bool tsUsed() const { for (int b = 0; b < pq::kNumBands; ++b) if (proc.getParamReal (juce::String (pq::bid (b, "ts"))) > 0.5f && proc.getParamReal (juce::String (pq::bid (b, "on"))) > 0.5f) return true; return false; }
     PrimeqProcessor& proc; LevelMeter meter;
     juce::Slider outK; juce::Label outL, info, lFft, lView, lTilt, lRng;
     juce::ToggleButton autoB, deltaB, scB, phB, frB; juce::ComboBox fftC, viewC, tiltC, rngC;
@@ -233,6 +235,13 @@ public:
             addAndMakeVisible (c); a = std::make_unique<ComboAtt> (proc.apvts, id, c);
             l.setText (cap, juce::dontSendNotification); l.setFont (fontOf (10.f)); l.setColour (juce::Label::textColourId, kDim); addAndMakeVisible (l); };
         combo (chMode, aChMode, "ch_mode", lMode, "CHARACTER"); combo (chOs, aChOs, "ch_os", lOs, "OVERSAMPLING"); combo (look, aLook, "look", lLook, "LOOKAHEAD");
+        for (auto* sp : { &tsSep, &tsSm })
+        { sp->setSliderStyle (juce::Slider::LinearHorizontal); sp->setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 16); sp->setColour (juce::Slider::thumbColourId, kTeal); sp->setColour (juce::Slider::trackColourId, kTealDim); sp->setColour (juce::Slider::backgroundColourId, kLine); addAndMakeVisible (*sp); }
+        aTsSep = std::make_unique<SliderAtt> (proc.apvts, "ts_sep", tsSep); aTsSm = std::make_unique<SliderAtt> (proc.apvts, "ts_smooth", tsSm);
+        tsSep.textFromValueFunction = pct; tsSep.valueFromTextFunction = pPct; tsSep.updateText(); tsSm.textFromValueFunction = ms; tsSm.valueFromTextFunction = pMs; tsSm.updateText();
+        for (auto* l : { &lTsSep, &lTsSm }) { l->setFont (fontOf (10.f)); l->setColour (juce::Label::textColourId, kDim); addAndMakeVisible (*l); }
+        lTsSep.setText ("T/S SEP", juce::dontSendNotification); lTsSm.setText ("T/S SMOOTH", juce::dontSendNotification);
+        tsSep.setTooltip (T8 ("Rigidez da fronteira transiente/tonal (só afeta bandas com alvo Transient ou Tonal)")); tsSm.setTooltip (T8 ("Libertação da máscara de transientes: mais alto = transições mais suaves"));
         info.setColour (juce::Label::textColourId, kDim); info.setFont (fontOf (10.f)); info.setJustificationType (juce::Justification::centredLeft); addAndMakeVisible (info);
         chMode.setTooltip (T8 ("Clean: só harmónicos ímpares, muito linear · Subtle: 2.ª harmónica suave · Warm: mais saturação e agudos suavizados. Circuitos originais — não emulam hardware."));
         look.setTooltip (T8 ("Atrasa o áudio para os detetores dinâmicos reagirem antes do transiente (adiciona latência)"));
@@ -255,7 +264,8 @@ public:
         { auto top = mid.removeFromTop (22); lMode.setBounds (top.removeFromLeft (70)); chMode.setBounds (top.removeFromLeft (92)); top.removeFromLeft (8); lOs.setBounds (top.removeFromLeft (92)); chOs.setBounds (top.removeFromLeft (60));
           const int w = mid.getWidth() / 2; int x = mid.getX();
           for (auto* k : { &chDrive, &chMix }) { auto c = juce::Rectangle<int> (x, mid.getY(), w, mid.getHeight()); k->l.setBounds (c.removeFromTop (12)); k->s.setBounds (c); x += w; } }
-        { lLook.setBounds (r.removeFromTop (22).withTrimmedTop (4)); look.setBounds (r.removeFromTop (26)); }
+        { lLook.setBounds (r.removeFromTop (14)); look.setBounds (r.removeFromTop (22)); r.removeFromTop (3);
+          auto a = r.removeFromTop (19); lTsSep.setBounds (a.removeFromLeft (62)); tsSep.setBounds (a); auto b = r.removeFromTop (19); lTsSm.setBounds (b.removeFromLeft (62)); tsSm.setBounds (b); }
     }
     void paint (juce::Graphics& g) override
     {
@@ -265,8 +275,8 @@ public:
 private:
     struct Knob { juce::Slider s; juce::Label l; std::unique_ptr<SliderAtt> att; };
     PrimeqProcessor& proc; Knob dhAmt, dhLo, dhHi, dhSens, dhAtk, dhRel, chDrive, chMix;
-    juce::ToggleButton dhOn, dhDelta; juce::ComboBox chMode, chOs, look; juce::Label info, lMode, lOs, lLook;
-    std::unique_ptr<ButtonAtt> aDhOn, aDhDelta; std::unique_ptr<ComboAtt> aChMode, aChOs, aLook;
+    juce::ToggleButton dhOn, dhDelta; juce::ComboBox chMode, chOs, look; juce::Label info, lMode, lOs, lLook, lTsSep, lTsSm; juce::Slider tsSep, tsSm;
+    std::unique_ptr<SliderAtt> aTsSep, aTsSm; std::unique_ptr<ButtonAtt> aDhOn, aDhDelta; std::unique_ptr<ComboAtt> aChMode, aChOs, aLook;
 };
 
 // ------------------------------------------------------------------------------------------ Smart Ops
@@ -280,6 +290,8 @@ public:
         using namespace pqui;
         opBox.addItem ("Deresonate", Deres); opBox.addItem ("De-Ess", DeEssOp); opBox.addItem ("Reference Match", MatchOp); opBox.addItem ("Unmask (sidechain)", UnmaskOp); opBox.addItem ("Morph A \xE2\x86\x94 B", MorphOp);
         opBox.setSelectedId (Deres, juce::dontSendNotification); opBox.onChange = [this] { configureOp(); }; addAndMakeVisible (opBox);
+        modeBox.addItem ("Analisar", 1); modeBox.addItem ("Assistir", 2); modeBox.addItem ("Auto (opt-in)", 3); modeBox.setSelectedId (2, juce::dontSendNotification); addAndMakeVisible (modeBox);
+        modeBox.setTooltip (T8 ("Analisar: só mostra evidências e sugestões, nada é aplicado · Assistir: pré-visualiza e você aplica · Auto: aplica sozinho ao parar o Learn, só com confiança média/alta (Revert desfaz)"));
         for (auto* b : { &learnB, &stopB, &applyB, &revertB, &loadRefB, &capA, &capB, &clearMorphB }) addAndMakeVisible (b);
         addAndMakeVisible (morphOnB); morphOnB.setButtonText ("MORPH ATIVO"); aMorphOn = std::make_unique<ButtonAtt> (proc.apvts, "morph_on", morphOnB);
         morphS.setSliderStyle (juce::Slider::LinearHorizontal); morphS.setTextBoxStyle (juce::Slider::TextBoxRight, false, 62, 18); morphS.setColour (juce::Slider::thumbColourId, kTeal); morphS.setColour (juce::Slider::trackColourId, kTealDim); morphS.setColour (juce::Slider::backgroundColourId, kLine);
@@ -296,7 +308,7 @@ public:
             proc.analyzer.learnStart(); graph.showPreview = false; graph.preview.clear(); learned = false;
             setStatus (op() == UnmaskOp ? T8 ("A aprender… toque a pista E o sidechain ao mesmo tempo (≥ 4 s).") : (op() == DeEssOp ? T8 ("A aprender… toque a voz com sibilância (≥ 4 s).") : T8 ("A aprender… toque o material mais denso (≥ 2 s).")));
         };
-        stopB.onClick = [this] { if (! proc.analyzer.isLearning()) return; proc.analyzer.learnStop(); learned = true; recompute(); };
+        stopB.onClick = [this] { if (! proc.analyzer.isLearning()) return; proc.analyzer.learnStop(); learned = true; recompute(); if (mode() == 3 && ! graph.preview.empty() && confidence() >= 1) applyB.onClick(); };
         applyB.onClick = [this] { if (graph.preview.empty()) return; const int n = proc.smartApply (graph.preview, opBox.getText().toRawUTF8()); graph.showPreview = false; setStatus (juce::String (n) + T8 (" banda(s) criada(s). Revert desfaz.")); };
         revertB.onClick = [this] { proc.smartRevert(); setStatus (T8 ("Revertido.")); };
         loadRefB.onClick = [this] { chooseReference(); };
@@ -312,14 +324,15 @@ public:
         auto& an = proc.analyzer; const bool learning = an.isLearning();
         if (learning) setStatus (T8 ("A aprender: ") + juce::String (learnSeconds(), 1) + " s" + (opReady() ? T8 ("  — pode parar") : T8 ("  (ainda a recolher…)")) + (op() == UnmaskOp ? (an.unmaskEngine().hasSidechain() ? T8 ("  · sidechain OK") : T8 ("  · SIDECHAIN NÃO DETETADO")) : juce::String()));
         stopB.setEnabled (learning); learnB.setEnabled (! learning);
-        applyB.setEnabled (! graph.preview.empty() && ! learning); revertB.setEnabled (proc.smartCanRevert());
+        applyB.setEnabled (! graph.preview.empty() && ! learning && mode() != 1); revertB.setEnabled (proc.smartCanRevert());
         if (op() == MorphOp) refreshMorphStatus();
     }
     void resized() override
     {
         auto r = getLocalBounds().reduced (12, 10); r.removeFromTop (22);
-        opBox.setBounds (r.removeFromTop (28)); r.removeFromTop (8);
+        opBox.setBounds (r.removeFromTop (28)); r.removeFromTop (6);
         const bool morph = op() == MorphOp, match = op() == MatchOp;
+        modeBox.setVisible (! morph); if (! morph) { modeBox.setBounds (r.removeFromTop (26)); r.removeFromTop (6); } else r.removeFromTop (2);
         for (auto* c : std::initializer_list<juce::Component*> { &learnB, &stopB, &applyB, &revertB, &sens, &maxCut, &maxBands, &lSens, &lCut, &lBands }) c->setVisible (! morph);
         for (auto* c : std::initializer_list<juce::Component*> { &capA, &capB, &clearMorphB, &morphOnB, &morphS, &lMorph }) c->setVisible (morph);
         loadRefB.setVisible (match);
@@ -337,7 +350,7 @@ public:
         const bool showBands = op() != DeEssOp; maxBands.setVisible (showBands); lBands.setVisible (showBands);
         for (auto pr : { std::pair<juce::Label*, juce::Slider*> { &lSens, &sens }, { &lCut, &maxCut }, { &lBands, &maxBands } })
         { if (pr.second == &maxBands && ! showBands) continue; pr.first->setBounds (r.removeFromTop (16)); pr.second->setBounds (r.removeFromTop (24)); r.removeFromTop (4); }
-        r.removeFromTop (4); status.setBounds (r.removeFromTop (46)); status.setMinimumHorizontalScale (1.f); r.removeFromTop (4); note.setBounds (r);
+        r.removeFromTop (4); status.setBounds (r.removeFromTop (64)); status.setMinimumHorizontalScale (1.f); r.removeFromTop (4); note.setBounds (r);
     }
     void paint (juce::Graphics& g) override
     {
@@ -346,6 +359,19 @@ public:
     }
     void refreshLanguage() { if (! proc.analyzer.isLearning() && graph.preview.empty()) configureOp(); refreshMorphStatus(); repaint(); }
 private:
+    int mode() const { return modeBox.getSelectedId(); }
+    // confianca deterministica: quanto material foi recolhido face ao necessario para esta operacao (0 baixa, 1 media, 2 alta)
+    int confidence() const
+    {
+        const double need = op() == MatchOp ? 20.0 : (op() == UnmaskOp ? 12.0 : (op() == DeEssOp ? 8.0 : 10.0)), ratio = learnSeconds() / need;
+        return ratio >= 1.0 ? 2 : (ratio >= 0.5 ? 1 : 0);
+    }
+    juce::String confidenceText() const
+    {
+        static const char* nm[3] = { "BAIXA", "MÉDIA", "ALTA" }; const int c = confidence();
+        const char* risk = op() == DeEssOp ? "risco: perder brilho de hi-hats/pratos" : (op() == MatchOp ? "risco: alterar o carácter do material" : (op() == UnmaskOp ? "risco: buraco audível se o sidechain falhar" : "risco: tirar ressonâncias naturais do instrumento"));
+        return T8 ("Confiança: ") + T8 (nm[c]) + " (" + juce::String (learnSeconds(), 0) + " s)  ·  " + T8 (risk) + (c == 0 ? T8 ("  — recolha mais material.") : juce::String());
+    }
     double learnSeconds() const
     {
         auto& an = proc.analyzer;
@@ -442,11 +468,11 @@ private:
         graph.showPreview = ! graph.preview.empty(); graph.repaint();
         juce::String s = juce::String ((int) graph.preview.size()) + head;
         for (size_t i = 0; i < graph.preview.size() && i < 4; ++i) s << pq::units::formatFreq (graph.preview[i].freq) << " (" << juce::String (graph.preview[i].gainDb, 1) << " dB)  ";
-        setStatus (graph.preview.empty() ? T8 ("Nada a propor (material insuficiente, sem sibilância/conflito, ou abaixo da sensibilidade).") : s);
+        setStatus (graph.preview.empty() ? T8 ("Nada a propor (material insuficiente, sem sibilância/conflito, ou abaixo da sensibilidade).") : s + "\n" + confidenceText());
     }
     void setStatus (const juce::String& s) { status.setText (s, juce::dontSendNotification); }
     PrimeqProcessor& proc; EqGraph& graph; bool learned = false;
-    juce::ComboBox opBox; juce::TextButton learnB { "Learn" }, stopB { "Stop" }, applyB { "Apply" }, revertB { "Revert" }, loadRefB { "Carregar refer\xC3\xAAncia..." }, capA { "Guardar A" }, capB { "Guardar B" }, clearMorphB { "Limpar A/B" };
+    juce::ComboBox opBox, modeBox; juce::TextButton learnB { "Learn" }, stopB { "Stop" }, applyB { "Apply" }, revertB { "Revert" }, loadRefB { "Carregar refer\xC3\xAAncia..." }, capA { "Guardar A" }, capB { "Guardar B" }, clearMorphB { "Limpar A/B" };
     juce::ToggleButton morphOnB; juce::Slider sens, maxCut, maxBands, morphS; juce::Label lSens, lCut, lBands, status, note, lMorph;
     std::unique_ptr<ButtonAtt> aMorphOn; std::unique_ptr<SliderAtt> aMorph; std::unique_ptr<juce::FileChooser> chooser;
 };
@@ -528,6 +554,13 @@ public:
     AbxPanel& getAbx() { return abx; }
     OnboardingOverlay& getGuide() { return guide; }
     void changeLanguage (int l) { setLanguage (l); }
+    int currentSkin() const { return pqui::skinIndex(); }
+    // troca de skin (todas as instancias abertas seguem; a paleta e global ao processo)
+    void changeSkin (int i)
+    {
+        i = std::clamp (i, 0, 2); AccessManager::get().setSkin (i);
+        for (auto* e : openEditors()) e->refreshSkin (i);
+    }
     void showAbx (bool s) { abxBtn.setToggleState (s, juce::dontSendNotification); abx.setActive (s); resized(); }
     void showSmart (bool s) { smartBtn.setToggleState (s, juce::dontSendNotification); smart.setVisible (s && ! mix.isVisible()); if (s) { studioBtn.setToggleState (false, juce::dontSendNotification); studio.setActive (false); } resized(); }
     void showStudio (bool s) { studioBtn.setToggleState (s, juce::dontSendNotification); studio.setActive (s && ! mix.isVisible()); if (s) { smartBtn.setToggleState (false, juce::dontSendNotification); smart.setVisible (false); } resized(); }
@@ -562,10 +595,19 @@ private:
     }
     void setLanguage (int l) { pqui::i18n::lang() = l; AccessManager::get().setLanguage (l); applyLanguage(); }
     void presetMenu();
+    static std::vector<PrimeqEditor*>& openEditors() { static std::vector<PrimeqEditor*> v; return v; }
+    void refreshSkin (int i)
+    {
+        const int old = shownSkin; if (pqui::skinIndex() != i) pqui::applySkin (i);
+        lnf.refresh(); pqui::remapTree (*this, old); shownSkin = i; skinBtn.setButtonText (pqui::skinName (i)); sendLookAndFeelChange(); repaint();
+    }
+    struct SkinInit { SkinInit() { pqui::applySkin (AccessManager::get().skin()); } };
+    SkinInit skinInit;      // antes de qualquer componente: as cores dos filhos nascem ja na skin guardada
+    int shownSkin = pqui::skinIndex();
     PtGuard ptGuard;   // PRIMEIRO membro: forca PT durante a construcao para capturar os textos-fonte
     PrimeqProcessor& proc; pqui::Lnf lnf;
     EqGraph graph; BandPanel band; GlobalStrip strip; FxPanel fx; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; LoginOverlay login; OnboardingOverlay guide;
-    juce::TextButton langBtn { "PT" };
+    juce::TextButton langBtn { "PT" }, skinBtn { "PRIME" };
     juce::TextButton presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
     juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "ZONAS" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox modeBox; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;

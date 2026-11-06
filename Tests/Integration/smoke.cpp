@@ -515,6 +515,25 @@ int main()
             p->setTranslator (3); CHECK (p->translatorDevice() == 3, "Tradutor: monitorizacao ligada"); p->setTranslator (0);
         }
     }
+    // 24) skins + EQ Transiente/Tonal + modos do Smart
+    {
+        auto p = make (48000.0, 512); p->loadFactoryPreset (1); setBandP (*p, 1, "on", 1); setBandP (*p, 1, "ts", 1);
+        CHECK (p->getBand (1).ts == 1, "T/S: parametro ts por banda lido pelo modelo (ts=%d)", p->getBand (1).ts);
+        { pq::BandParams a[pq::kNumBands]; p->readBands (a); p->setBand (2, a[1]); CHECK (p->getBand (2).ts == 1, "T/S: setBand preserva ts"); }
+        setBandP (*p, 1, "ts", 2); setP (*p, "ts_sep", 80); setP (*p, "ts_smooth", 20);
+        { juce::MemoryBlock mb; p->getStateInformation (mb); auto q = make (48000.0, 512); q->setStateInformation (mb.getData(), (int) mb.getSize()); CHECK (q->getBand (1).ts == 2 && std::fabs (q->getParamReal ("ts_sep") - 80.f) < 0.2f, "T/S: estado guarda e repoe ts e separacao"); }
+        std::unique_ptr<juce::AudioProcessorEditor> ed (p->createEditor()); auto* pe = dynamic_cast<PrimeqEditor*> (ed.get()); pe->setSize (1240, 860); pe->selectBand (1); pe->showSmart (true);
+        const char* names[3] = { "prime", "ouro", "indigo" }; bool allDiff = true; juce::uint32 prev = 0;
+        for (int i = 0; i < 3; ++i)
+        {
+            pe->changeSkin (i); CHECK (pqui::skinIndex() == i && pqui::kTeal.getARGB() == pqui::paletteOf (i).accent && AccessManager::get().skin() == i, "Skin %s aplicada e guardada", pqui::skinName (i));
+            if (i > 0 && pqui::kTeal.getARGB() == prev) allDiff = false; prev = pqui::kTeal.getARGB();
+            auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f (juce::String ("skin_") + names[i] + ".png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo);
+            const auto px = im.getPixelAt (600, 400); CHECK (im.getWidth() == 1240 && px.getAlpha() > 0, "Skin %s: snapshot renderizado", pqui::skinName (i));
+        }
+        CHECK (allDiff, "Skins: as 3 paletas tem acentos distintos");
+        pe->changeSkin (0);
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }

@@ -52,7 +52,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout PrimeqProcessor::createLayou
         L.add (std::make_unique<APF> (PID (bid (b, "knee")), n + "Dyn Knee", juce::NormalisableRange<float> (0.f, 24.f, 0.1f), 6.f, FA().withLabel ("dB")));
         L.add (std::make_unique<APC> (PID (bid (b, "det")), n + "Dyn Detector", juce::StringArray { "Peak", "RMS" }, 0));
         L.add (std::make_unique<APC> (PID (bid (b, "dir")), n + "Dyn Direction", juce::StringArray { "Above", "Below" }, 0));
+        L.add (std::make_unique<APC> (PID (bid (b, "ts")), n + "Transient/Tonal", juce::StringArray { "Both", "Transient", "Tonal" }, 0));
     }
+    L.add (std::make_unique<APF> (PID ("ts_sep"), "T/S Separation", juce::NormalisableRange<float> (0.f, 100.f, 0.1f), 60.f, FA().withLabel ("%")));
+    L.add (std::make_unique<APF> (PID ("ts_smooth"), "T/S Smooth", skewed (1.f, 100.f, 10.f), 8.f, FA().withLabel ("ms")));
     L.add (std::make_unique<APC> (PID ("phase"), "Phase Mode", juce::StringArray { "Zero Latency", "Natural Phase", "Linear Phase" }, 0));
     L.add (std::make_unique<APB> (PID ("bypass"), "Bypass", false));
     L.add (std::make_unique<APF> (PID ("out"), "Output Gain", juce::NormalisableRange<float> (-24.f, 24.f, 0.01f), 0.f, FA().withLabel ("dB")));
@@ -94,8 +97,9 @@ PrimeqProcessor::PrimeqProcessor()
     for (int b = 0; b < kNumBands; ++b)
     {
         auto g = [&] (const char* k) { return apvts.getRawParameterValue (juce::String (bid (b, k))); };
-        bp[(size_t) b] = { g ("on"), g ("type"), g ("freq"), g ("gain"), g ("q"), g ("slope"), g ("place"), g ("dyn"), g ("thr"), g ("range"), g ("ratio"), g ("attack"), g ("hold"), g ("release"), g ("knee"), g ("det"), g ("dir") };
+        bp[(size_t) b] = { g ("on"), g ("type"), g ("freq"), g ("gain"), g ("q"), g ("slope"), g ("place"), g ("dyn"), g ("thr"), g ("range"), g ("ratio"), g ("attack"), g ("hold"), g ("release"), g ("knee"), g ("det"), g ("dir"), g ("ts") };
     }
+    pTsSep = apvts.getRawParameterValue ("ts_sep"); pTsSmooth = apvts.getRawParameterValue ("ts_smooth");
     pPhase = apvts.getRawParameterValue ("phase"); pBypass = apvts.getRawParameterValue ("bypass"); pOut = apvts.getRawParameterValue ("out");
     pAuto = apvts.getRawParameterValue ("autogain"); pDelta = apvts.getRawParameterValue ("delta"); pScExt = apvts.getRawParameterValue ("scext");
     auto G = [&] (const char* k) { return apvts.getRawParameterValue (k); };
@@ -203,7 +207,7 @@ void PrimeqProcessor::readBands (BandParams* out) const
         o.on = D (q.on) > 0.5; o.type = (BandType) std::clamp (I (q.type), 0, 7); o.freq = D (q.freq); o.gain = D (q.gain); o.q = D (q.q);
         o.slope = std::clamp (I (q.slope), 0, kNumSlopes - 1); o.place = (Placement) std::clamp (I (q.place), 0, 4);
         o.dyn = D (q.dyn) > 0.5; o.thr = D (q.thr); o.range = D (q.range); o.ratio = D (q.ratio); o.attackMs = D (q.attack); o.holdMs = D (q.hold);
-        o.releaseMs = D (q.release); o.kneeDb = D (q.knee); o.det = (DetMode) std::clamp (I (q.det), 0, 1); o.dir = (DynDir) std::clamp (I (q.dir), 0, 1);
+        o.releaseMs = D (q.release); o.kneeDb = D (q.knee); o.det = (DetMode) std::clamp (I (q.det), 0, 1); o.dir = (DynDir) std::clamp (I (q.dir), 0, 1); o.ts = std::clamp (I (q.ts), 0, 2);
     }
 }
 
@@ -222,13 +226,13 @@ void PrimeqProcessor::setBand (int b, const BandParams& p)
     auto S = [&] (const char* k, double v) { setParamReal (juce::String (bid (b, k)), (float) v); };
     S ("on", p.on ? 1 : 0); S ("type", (int) p.type); S ("freq", p.freq); S ("gain", p.gain); S ("q", p.q); S ("slope", p.slope); S ("place", (int) p.place);
     S ("dyn", p.dyn ? 1 : 0); S ("thr", p.thr); S ("range", p.range); S ("ratio", p.ratio); S ("attack", p.attackMs); S ("hold", p.holdMs);
-    S ("release", p.releaseMs); S ("knee", p.kneeDb); S ("det", (int) p.det); S ("dir", (int) p.dir);
+    S ("release", p.releaseMs); S ("knee", p.kneeDb); S ("det", (int) p.det); S ("dir", (int) p.dir); S ("ts", p.ts);
 }
 
 void PrimeqProcessor::resetAllBands()
 {
     for (int b = 0; b < kNumBands; ++b)
-        for (const char* k : { "on", "type", "freq", "gain", "q", "slope", "place", "dyn", "thr", "range", "ratio", "attack", "hold", "release", "knee", "det", "dir" })
+        for (const char* k : { "on", "type", "freq", "gain", "q", "slope", "place", "dyn", "thr", "range", "ratio", "attack", "hold", "release", "knee", "det", "dir", "ts" })
             if (auto* p = apvts.getParameter (juce::String (bid (b, k)))) { p->beginChangeGesture(); p->setValueNotifyingHost (p->getDefaultValue()); p->endChangeGesture(); }
 }
 
@@ -285,6 +289,7 @@ void PrimeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     if (bandAbx && abxS == 1) bands[abxBd].on = false;      // ABX por banda: A = EQ sem a banda k; B = EQ completo
     core.setParams (bands);
     core.setListen (listenBand.load (std::memory_order_relaxed));
+    core.setTransient (pTsSep->load() / 100.0, pTsSmooth->load());
     const int phaseIdx = std::clamp ((int) (pPhase->load() + 0.5f), 0, 2);
     const bool bypass = bandAbx ? false : (abxS == 1 ? true : (abxS == 2 ? false : pBypass->load() > 0.5f)), delta = pDelta->load() > 0.5f, autoG = pAuto->load() > 0.5f;
     Stage tgt; tgt.path = phaseIdx != 0 ? 1 : 0; tgt.look = lookSamplesFor ((int) (pLook->load() + 0.5f)); tgt.dh = pDhOn->load() > 0.5f;
