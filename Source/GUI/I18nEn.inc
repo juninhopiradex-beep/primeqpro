@@ -231,7 +231,7 @@
 { "mais forte = melhor", "louder = better" },
 { "Idioma / Language", "Language" },
 { "ALVO", "TARGET" },
-{ "TRADUTOR", "TRANSLATOR" },
+{ "TRADUTOR", "TRANSLATE" },
 { "PALAVRAS", "WORDS" },
 { "COFRE", "VAULT" },
 { "ENSINO", "TEACH" },
