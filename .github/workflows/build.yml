@@ -25,7 +25,7 @@ jobs:
         env:
           S_B64: ${{ secrets.PRIMEQPRO_SECRETS_B64 }}
         run: |
-          if [ -n "$S_B64" ]; then echo "$S_B64" | base64 -d > Source/Shared/Secrets.h; echo "Secrets.h injetado"; else echo "::warning::PRIMEQPRO_SECRETS_B64 nao definido: build SEM senhas offline (so periodo aberto ate 31/12/2026 e PCC)"; fi
+          if [ -f Source/Shared/Secrets.h ]; then echo "Secrets.h do repositorio (so salt + hash; master rodada a 24/11/2026)"; elif [ -n "$S_B64" ]; then echo "$S_B64" | base64 -d > Source/Shared/Secrets.h; echo "Secrets.h injetado"; else echo "::warning::PRIMEQPRO_SECRETS_B64 nao definido: build SEM senhas offline (so periodo aberto ate 31/12/2026 e PCC)"; fi
       - name: Dependencias JUCE (Linux)
         run: |
           sudo apt-get update
@@ -61,7 +61,7 @@ jobs:
         env:
           S_B64: ${{ secrets.PRIMEQPRO_SECRETS_B64 }}
         run: |
-          if [ -n "$S_B64" ]; then echo "$S_B64" | base64 -d > Source/Shared/Secrets.h; echo "Secrets.h injetado"; else echo "::warning::PRIMEQPRO_SECRETS_B64 nao definido: build SEM senhas offline (so periodo aberto ate 31/12/2026 e PCC)"; fi
+          if [ -f Source/Shared/Secrets.h ]; then echo "Secrets.h do repositorio (so salt + hash; master rodada a 24/11/2026)"; elif [ -n "$S_B64" ]; then echo "$S_B64" | base64 -d > Source/Shared/Secrets.h; echo "Secrets.h injetado"; else echo "::warning::PRIMEQPRO_SECRETS_B64 nao definido: build SEM senhas offline (so periodo aberto ate 31/12/2026 e PCC)"; fi
 
       - name: Versao e segredos de assinatura
         run: |
@@ -208,7 +208,7 @@ jobs:
         env:
           S_B64: ${{ secrets.PRIMEQPRO_SECRETS_B64 }}
         run: |
-          if [ -n "$S_B64" ]; then echo "$S_B64" | base64 -d > Source/Shared/Secrets.h; echo "Secrets.h injetado"; else echo "::warning::PRIMEQPRO_SECRETS_B64 nao definido: build SEM senhas offline (so periodo aberto ate 31/12/2026 e PCC)"; fi
+          if [ -f Source/Shared/Secrets.h ]; then echo "Secrets.h do repositorio (so salt + hash; master rodada a 24/11/2026)"; elif [ -n "$S_B64" ]; then echo "$S_B64" | base64 -d > Source/Shared/Secrets.h; echo "Secrets.h injetado"; else echo "::warning::PRIMEQPRO_SECRETS_B64 nao definido: build SEM senhas offline (so periodo aberto ate 31/12/2026 e PCC)"; fi
       - name: Caminhos longos
         shell: pwsh
         run: git config --global core.longpaths true

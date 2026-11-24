@@ -8,4 +8,3 @@ __pycache__/
 PRIVADO_senhas_*.txt
 secrets.b64
 PRIVADO_*
-Source/Shared/Secrets.h
