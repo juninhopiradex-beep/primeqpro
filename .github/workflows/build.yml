@@ -183,6 +183,14 @@ jobs:
           if [ "$HAS_SIGN" = "true" ] && [ -n "${{ secrets.MACOS_INSTALLER_IDENTITY }}" ]; then SIGN_ARGS="--sign ${{ secrets.MACOS_INSTALLER_IDENTITY }}"; fi
           productbuild --distribution Packaging/macos/Distribution.xml --package-path build-pkg --resources Packaging/macos/resources $SIGN_ARGS "PRIMEQPRO-${VER}-macOS.pkg"
           ls -la "PRIMEQPRO-${VER}-macOS.pkg"
+      - name: Instaladores separados (Mac Apple Silicon e Mac Intel com macOS 10.13 / Catalina ou mais recente)
+        env:
+          SIGN_ID: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          INSTALLER_ID: ${{ secrets.MACOS_INSTALLER_IDENTITY }}
+        run: |
+          V=$(grep -m1 -oE 'project\([^)]*VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | grep -oE '[0-9]+\.[0-9]+\.[0-9]+$')
+          bash ${{ github.workspace }}/ci/mac-split.sh Packaging/macos/Distribution.xml Packaging/macos/resources PRIMEQPRO "$V" "vst3.pkg|pkgroot/vst3|com.beatfreak.primeqpro.vst3||/Library/Audio/Plug-Ins/VST3" "au.pkg|pkgroot/au|com.beatfreak.primeqpro.au|Packaging/macos/scripts|/Library/Audio/Plug-Ins/Components"
+
 
       - name: Notarizar (so com credenciais Apple)
         if: env.HAS_NOTARIZE == 'true'
@@ -200,6 +208,8 @@ jobs:
         with:
           name: PRIMEQPRO-macOS
           path: |
+            PRIMEQPRO-*-macOS-AppleSilicon.pkg
+            PRIMEQPRO-*-macOS-Intel-macOS10.13.pkg
             PRIMEQPRO-*-macOS.pkg
             PRIMEQPRO-*-macOS.zip
             binary-check.log

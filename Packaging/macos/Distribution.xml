@@ -18,6 +18,6 @@
         <pkg-ref id="com.beatfreak.primeqpro.au"/>
     </choice>
 
-    <pkg-ref id="com.beatfreak.primeqpro.vst3" version="1.0.0" onConclusion="none">vst3.pkg</pkg-ref>
-    <pkg-ref id="com.beatfreak.primeqpro.au"   version="1.0.0" onConclusion="none">au.pkg</pkg-ref>
+    <pkg-ref id="com.beatfreak.primeqpro.vst3" version="1.0.1" onConclusion="none">vst3.pkg</pkg-ref>
+    <pkg-ref id="com.beatfreak.primeqpro.au"   version="1.0.1" onConclusion="none">au.pkg</pkg-ref>
 </installer-gui-script>
