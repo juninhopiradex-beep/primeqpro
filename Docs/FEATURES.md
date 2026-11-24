@@ -21,9 +21,9 @@
 ## Parcial / limitações
 - Em modos FIR a dinâmica actualiza a ~25 Hz (tarefa de fundo); a transição de modo demora ~100 ms.
 - Mix Unmask: só vê instâncias no mesmo processo do anfitrião; análise opt-in (usa CPU); estimativa sobre níveis medidos (25 ms), não é audição; sidechain exige routing no DAW; não existe ajuste automático de volume por pista.
-- Reference Match: a referência não é guardada no projecto. De-Ess/De-harsh têm falsos positivos (hi-hats, sons tonais sustentados). Character são circuitos originais, não emulam hardware.
+- Reference Match: o perfil da referência fica guardado no projecto desde a 1.13.0 (o áudio da referência não). De-Ess/De-harsh têm falsos positivos (hi-hats, sons tonais sustentados). Character são circuitos originais, não emulam hardware.
 - Brickwall é um filtro finito (ordem 32), não uma parede ideal.
-- PCC: cliente e função `validate` prontos, mas só funcionam depois de a função ser instalada no Supabase (ver LICENSING_PCC.md). Sem isso o login online dá "sem ligação"/resposta inválida.
+- PCC: instalado e ativo no Supabase (projeto pcc, função `validate` com PRIMEQPRO).
 - Assistente: Doutor e Intenção são regras DSP determinísticas (V1 do dossiê), não ML; não medem reverb, dicção nem preferência. "Pan candidato" é sugestão (o plugin não tem panner). Cenários limitados a 2–3 pistas e a um conflito de cada vez; usam níveis por banda (25 ms), não forma de onda — não veem fase/latência/crest factor de banda larga. Sem isolamento automático entre projectos no mesmo processo do DAW (use os grupos). Não existem ainda testes cegos de preferência auditiva, nem prova de superioridade face a concorrentes.
 ## Não implementado
 AAX (precisa do SDK da Avid).

@@ -516,3 +516,4 @@
 { "Terminar sessão", "Log out" },
 { "Predefinição anterior", "Previous preset" },
 { "Predefinição seguinte", "Next preset" },
+{ "Zero Latency: dinâmica a cada amostra, sem latência · Natural e Linear (FIR): fase mais limpa, mas as bandas dinâmicas atualizam ~25 vezes por segundo e a troca de modo demora ~100 ms. Para de-ess rápido use Zero Latency.", "Zero Latency: per-sample dynamics, no latency · Natural and Linear (FIR): cleaner phase, but dynamic bands update ~25 times per second and switching mode takes ~100 ms. For fast de-essing use Zero Latency." },

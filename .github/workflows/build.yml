@@ -35,9 +35,10 @@ jobs:
       - name: Compilar
         run: cmake --build build-tests --config Release --target test_dsp PrimeqSmoke -j 4
       - name: Testes DSP (C++ puro)
-        run: ./build-tests/test_dsp | tee test_dsp.log
+        run: set -o pipefail; ./build-tests/test_dsp | tee test_dsp.log
       - name: Teste de integracao do processador (JUCE)
         run: |
+          set -o pipefail
           mkdir -p smoke && cd smoke
           xvfb-run -a ../build-tests/PrimeqSmoke_artefacts/Release/PrimeqSmoke | tee ../smoke.log
       - uses: actions/upload-artifact@v4

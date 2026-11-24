@@ -13,6 +13,7 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     for (auto* b : { &presetBtn, &undoBtn, &redoBtn, &abBtn, &logoutBtn }) addAndMakeVisible (b);
     addAndMakeVisible (bypassBtn); addAndMakeVisible (smartBtn); addAndMakeVisible (phaseBox); addAndMakeVisible (phaseLbl);
     if (auto* pc = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter ("phase"))) phaseBox.addItemList (pc->choices, 1);
+    phaseBox.setTooltip (pqui::T8 ("Zero Latency: dinâmica a cada amostra, sem latência · Natural e Linear (FIR): fase mais limpa, mas as bandas dinâmicas atualizam ~25 vezes por segundo e a troca de modo demora ~100 ms. Para de-ess rápido use Zero Latency."));
     aPhase = std::make_unique<ComboAtt> (proc.apvts, "phase", phaseBox); aBypass = std::make_unique<ButtonAtt> (proc.apvts, "bypass", bypassBtn);
     phaseLbl.setText ("FASE", juce::dontSendNotification); phaseLbl.setColour (juce::Label::textColourId, kDim); phaseLbl.setFont (fontOf (10.f, true)); phaseLbl.setJustificationType (juce::Justification::centredRight);
     presetBtn.onClick = [this] { presetMenu(); };

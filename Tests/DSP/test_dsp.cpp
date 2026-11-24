@@ -639,13 +639,13 @@ int main()
     }
     // perfis do Smart Ops, niveis de confianca e logica do colectivo
     {
-        const int want[5] = { 0, 19, 9, 6, 8 }; bool ok = true;
+        bool ok = true;   // 1.11: pelo menos 20 perfis por operacao (o teste antigo esperava 19/9/6/8)
         for (int op = 1; op <= 4; ++op)
         {
-            const auto& v = pq::profiles::of (op); if ((int) v.size() != want[op]) ok = false;
+            const auto& v = pq::profiles::of (op); if ((int) v.size() < 20) ok = false;
             for (size_t i = 0; i < v.size(); ++i) { if (! (v[i].fmin > 0 && v[i].fmax > v[i].fmin && v[i].fmax <= 20000)) ok = false; for (size_t j = i + 1; j < v.size(); ++j) if (std::string (v[i].name) == v[j].name) ok = false; }
         }
-        CHECK (ok, "Perfis do Smart Ops: contagens (19/9/6/8), gamas validas e nomes unicos");
+        CHECK (ok, "Perfis do Smart Ops: >= 20 por operacao, gamas validas e nomes unicos");
         pq::Confidence c; c.any = true; c.score = 0.7; const bool h = c.level() == 2; c.score = 0.5; const bool m = c.level() == 1; c.score = 0.2; CHECK (h && m && c.level() == 0, "Confianca: limiares alta >= 0,65, media >= 0,40, baixa");
         pq::Collective col; for (int t = 0; t < 3; ++t) { pq::CollTrack ct; ct.name = "t"; for (int b = 0; b < pq::kMixBands; ++b) ct.db[(size_t) b] = -80.f; ct.db[10] = -10.f - (t == 2 ? 25.f : (float) t); ct.peakDb = ct.db[10]; col.tracks.push_back (ct); }
         pq::Collective::analyse (col);

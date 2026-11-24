@@ -640,6 +640,17 @@ int main()
         { auto im = pe->createComponentSnapshot (pe->getLocalBounds(), true, 1.0f); juce::File f ("ui_smart_menu.png"); f.deleteFile(); juce::FileOutputStream fo (f); juce::PNGImageFormat().writeImageToStream (im, fo); }
         pe->showSmart (false);
     }
+    // 30) auditoria 24/11/2026: a referencia do Reference Match e o grupo de mistura ficam gravados na sessao
+    {
+        auto p = make (48000.0, 512);
+        p->matchRefDb.assign ((size_t) pq::LogGrid::N, 0.0); for (int i = 0; i < pq::LogGrid::N; ++i) p->matchRefDb[(size_t) i] = -30.0 - 0.05 * i; p->matchRefName = "referencia.wav";
+        pq::MixRegistry::get().setGroup (p->mixSlot(), 3);
+        juce::MemoryBlock mb; p->getStateInformation (mb);
+        pq::MixRegistry::get().setGroup (p->mixSlot(), 1);
+        auto q = make (48000.0, 512); q->setStateInformation (mb.getData(), (int) mb.getSize());
+        CHECK (q->matchRefDb.size() == (size_t) pq::LogGrid::N && std::abs (q->matchRefDb[100] - (-35.0)) < 0.01 && q->matchRefName == "referencia.wav", "Reference Match: referencia reposta da sessao (%d pontos)", (int) q->matchRefDb.size());
+        CHECK (pq::MixRegistry::get().group (q->mixSlot()) == 3, "grupo de mistura reposto da sessao (%d)", pq::MixRegistry::get().group (q->mixSlot()));
+    }
     std::printf ("\n%d testes ok, %d falhas\n", passes, fails);
     return fails ? 1 : 0;
 }

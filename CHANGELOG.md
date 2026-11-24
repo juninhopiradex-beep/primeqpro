@@ -1,4 +1,11 @@
 # Changelog
+## 1.13.0 — 2026-11-24 (auditoria)
+- **Reference Match:** o perfil da referência (240 pontos, não o áudio) passa a ficar gravado na sessão — ao reabrir o projeto já não é preciso carregar a referência outra vez.
+- **Corrigido:** o grupo de mistura (OUTRAS PISTAS / Mix Unmask) nunca era reposto ao abrir a sessão (a linha estava dentro de um comentário).
+- Explicação dos modos de FASE (Zero Latency / Natural / Linear) no botão: em FIR a dinâmica atualiza ~25 vezes por segundo.
+- Testes: o teste de perfis do Smart Ops estava desatualizado (falhava em silêncio no CI); o CI passa a falhar quando um teste falha.
+- Nova senha master; o `Secrets.h` (só salt + hash) passa a ir no repositório e substitui o segredo antigo do GitHub.
+
 ## 1.12.0 — MEDIDOR NOVO E AJUSTES
 - **Medidor de saída**: escala −60…+3 dB (margem acima do 0), núcleo = nível médio, camada fraca = pico, traço branco = pico retido, cor muda com o nível; CLIP só acende em 0 dBFS (clique limpa).
 - **Smart Ops**: volta ao menu de perfis (agora com 24 perfis no Deresonate e 20 nos outros).
