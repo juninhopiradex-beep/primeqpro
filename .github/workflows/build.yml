@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  # Opcional: URL privada (zip) do AAX SDK da Avid. Sem este segredo o AAX NAO e compilado.
+  # Opcional: URL privada (zip) de outro AAX SDK. Sem ele usa o SDK incluido na JUCE 8 (o AAX compila sempre).
   AAX_SDK_URL: ${{ secrets.AAX_SDK_URL }}
 
 jobs:
@@ -83,8 +83,8 @@ jobs:
       - name: Configurar (universal x86_64 + arm64, minimo 10.13)
         run: cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 $AAX_FLAG
 
-      - name: Compilar VST3 + AU + Standalone (Release)
-        run: cmake --build build --config Release --target PrimeqPro_VST3 PrimeqPro_AU PrimeqPro_Standalone -j 4
+      - name: Compilar VST3 + AU + AAX + Standalone (Release)
+        run: cmake --build build --config Release --target PrimeqPro_VST3 PrimeqPro_AU PrimeqPro_AAX PrimeqPro_Standalone -j 4
 
       - name: Recolher artefactos
         run: |
@@ -226,7 +226,7 @@ jobs:
       - name: Compilar VST3 + Standalone (Release)
         shell: pwsh
         run: |
-          cmake --build C:/b --config Release --target PrimeqPro_VST3 PrimeqPro_Standalone 2>&1 | Tee-Object -Append -FilePath win-configure.log
+          cmake --build C:/b --config Release --target PrimeqPro_VST3 PrimeqPro_AAX PrimeqPro_Standalone 2>&1 | Tee-Object -Append -FilePath win-configure.log
           exit $LASTEXITCODE
       - name: Recolher VST3
         shell: pwsh
@@ -237,6 +237,8 @@ jobs:
           Copy-Item -Recurse -Force $vst3.FullName "out\PrimEQ Pro by Piradex.vst3"
           $exe = Get-ChildItem -Path C:/b -Recurse -File -Filter "PrimEQ Pro by Piradex.exe" | Select-Object -First 1
           if ($exe) { Copy-Item $exe.FullName "out\PrimEQ Pro by Piradex (Standalone).exe" }
+          $aax = Get-ChildItem -Path C:/b -Recurse -Directory -Filter "PrimEQ Pro by Piradex.aaxplugin" | Select-Object -First 1
+          if ($aax) { Copy-Item -Recurse -Force $aax.FullName "out\PrimEQ Pro by Piradex.aaxplugin" } else { throw "AAX nao encontrado" }
           Get-ChildItem -Recurse out | Select-Object FullName, Length
       - name: pluginval (VST3, strictness 5)
         shell: pwsh
@@ -287,6 +289,7 @@ jobs:
             echo
             echo "- macOS: PRIMEQPRO-$VER-macOS.pkg (VST3 + AU, universal Intel/Apple Silicon, macOS 10.13+) e .zip para instalacao manual"
             echo "- Windows: PRIMEQPRO-$VER-Windows-Setup.exe (VST3 x64) e .zip"
+            echo "- AAX (Pro Tools): dentro dos .zip (pasta PrimEQ Pro by Piradex.aaxplugin). Sem assinatura PACE so abre no Pro Tools Developer."
             echo "- Binarios NAO notarizados/assinados com Developer ID/Authenticode, a menos que as credenciais estejam configuradas (ver Packaging/SIGNING.md)"
             echo "- AAX: nao incluido (requer SDK Avid + assinatura PACE; ver Docs/AAX.md)"
             echo "- Funcionalidades prontas/parciais/em falta: Docs/FEATURES.md"

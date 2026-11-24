@@ -26,6 +26,6 @@
 - PCC: instalado e ativo no Supabase (projeto pcc, função `validate` com PRIMEQPRO).
 - Assistente: Doutor e Intenção são regras DSP determinísticas (V1 do dossiê), não ML; não medem reverb, dicção nem preferência. "Pan candidato" é sugestão (o plugin não tem panner). Cenários limitados a 2–3 pistas e a um conflito de cada vez; usam níveis por banda (25 ms), não forma de onda — não veem fase/latência/crest factor de banda larga. Sem isolamento automático entre projectos no mesmo processo do DAW (use os grupos). Não existem ainda testes cegos de preferência auditiva, nem prova de superioridade face a concorrentes.
 ## Não implementado
-AAX (precisa do SDK da Avid).
+AAX: compila a partir da 1.13.0 (SDK incluído na JUCE 8), mas o Pro Tools normal só o carrega depois da assinatura PACE/iLok (falta a conta PACE).
 ## Não verificado
 Compilação macOS/Windows (só no CI), validação AU (auval), carregamento em DAWs reais, AAX.

@@ -22,7 +22,8 @@ else()
     FetchContent_MakeAvailable(JUCE)
 endif()
 
-# Formatos. AAX so existe quando o SDK da Avid esta disponivel (-DAAX_SDK_PATH=...) e o binario e depois assinado com PACE/iLok.
+# Formatos. A JUCE 8 ja traz o SDK do AAX: o AAX compila sempre em macOS e Windows (-DAAX_SDK_PATH=... usa outro SDK).
+# O Pro Tools normal so carrega o .aaxplugin depois de assinado com PACE/iLok (wraptool); sem isso serve no Pro Tools Developer.
 if(APPLE)
     set(PQ_FORMATS VST3 AU Standalone)
 else()
@@ -31,11 +32,10 @@ endif()
 set(PQ_AAX OFF)
 if(DEFINED AAX_SDK_PATH AND EXISTS "${AAX_SDK_PATH}")
     juce_set_aax_sdk_path("${AAX_SDK_PATH}")
+endif()
+if(APPLE OR WIN32)
     list(APPEND PQ_FORMATS AAX)
     set(PQ_AAX ON)
-    message(STATUS "AAX ativado (SDK em ${AAX_SDK_PATH})")
-else()
-    message(STATUS "AAX desativado: defina -DAAX_SDK_PATH=<pasta do AAX SDK da Avid>")
 endif()
 
 juce_add_plugin(PrimeqPro
