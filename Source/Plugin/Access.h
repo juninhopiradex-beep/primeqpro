@@ -18,7 +18,11 @@ class AccessManager
 public:
     static AccessManager& get();
 
+#if defined (PIRADEX_TEST_OPEN)
+    static bool inTrial()          { return true; }    // so nos testes de integracao (processam audio sem login)
+#else
     static bool inTrial()          { return false; }   // 1.0.1: sem periodo aberto - login obrigatorio desde ja (master, beta ate 31/12/2026 ou licenca PCC)
+#endif
     bool isUnlocked() const        { return unlocked.load() || inTrial(); }      // seguro na thread de audio (atomico)
     pq::lic::Role role() const     { auto r = (pq::lic::Role) roleValue.load(); return (r == pq::lic::Role::None && inTrial()) ? pq::lic::Role::Beta : r; }
     juce::String roleText() const;                                   // "MESTRE" / "BETA · até 31/12/2026"

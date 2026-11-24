@@ -109,7 +109,7 @@ if(PQ_BUILD_SMOKE)
     juce_add_console_app(PrimeqSmoke PRODUCT_NAME "primeq_smoke")
     target_sources(PrimeqSmoke PRIVATE Tests/Integration/smoke.cpp Source/Plugin/PluginProcessor.cpp Source/Plugin/Access.cpp Source/GUI/PluginEditor.cpp)
     target_include_directories(PrimeqSmoke PRIVATE Source)
-    target_compile_definitions(PrimeqSmoke PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1 JUCE_STANDALONE_APPLICATION=1
+    target_compile_definitions(PrimeqSmoke PRIVATE PIRADEX_TEST_OPEN=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1 JUCE_STANDALONE_APPLICATION=1
         JucePlugin_VersionString="${PROJECT_VERSION}" JucePlugin_Name="PrimEQ Pro by Piradex" JUCE_PLUGINHOST_AU=0)
     target_link_libraries(PrimeqSmoke PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_dsp juce::juce_recommended_config_flags)
 endif()
