@@ -18,7 +18,7 @@ class AccessManager
 public:
     static AccessManager& get();
 
-    static bool inTrial()          { return pq::lic::todayDays2026() <= pq::lic::daysSince2026 (2026, 12, 31); }   // aberto ate 31/12/2026
+    static bool inTrial()          { return false; }   // 1.0.1: sem periodo aberto - login obrigatorio desde ja (master, beta ate 31/12/2026 ou licenca PCC)
     bool isUnlocked() const        { return unlocked.load() || inTrial(); }      // seguro na thread de audio (atomico)
     pq::lic::Role role() const     { auto r = (pq::lic::Role) roleValue.load(); return (r == pq::lic::Role::None && inTrial()) ? pq::lic::Role::Beta : r; }
     juce::String roleText() const;                                   // "MESTRE" / "BETA · até 31/12/2026"
