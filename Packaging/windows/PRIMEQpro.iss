@@ -1,7 +1,7 @@
 ; PrimEQ Pro by Piradex — instalador Windows (Inno Setup). Instala o VST3 em C:\Program Files\Common Files\VST3
 
 #define MyName "PrimEQ Pro by Piradex"
-#define MyVersion "1.0.1"
+#define MyVersion "1.0.2"
 #define MyPublisher "Ricardo Amorim / Juninho Piradex"
 
 ; Caminhos passados pelo workflow (/D). Valores por omissao para build local.
