@@ -131,7 +131,7 @@
 { "Teste ABX cego", "Blind ABX test" },
 { "O botão ABX compara original (A) e processado (B) com o loudness igualado, para o ouvido não ser enganado por \"mais alto = melhor\".\n\nEm cada tentativa ouves A, B e um X escondido, e dizes se X é A ou B. Ao fim de 10 tentativas vês quantas acertaste e se a diferença é estatisticamente audível.", "The ABX button compares original (A) and processed (B) with matched loudness, so your ear is not fooled by \"louder = better\".\n\nIn each trial you hear A, B and a hidden X, and say whether X is A or B. After 10 trials you see how many you got right and whether the difference is statistically audible." },
 { "Licença e ajuda", "Licence and help" },
-{ "Até 31/12/2026 o plugin abre sem senha. Depois, entra com a tua licença Piradex (validada online no PCC, com cache para trabalhar offline) ou com a senha master.\n\nManual completo: Docs/MANUAL.md. Para rever este guia, carrega no botão \"?\" no topo.\n\nBoa mistura!", "Until 31/12/2026 the plugin opens without a password. After that, sign in with your Piradex licence (validated online in the PCC, cached to work offline) or with the master password.\n\nFull manual: Docs/MANUAL.md. To see this guide again, press the \"?\" button at the top.\n\nHappy mixing!" },
+{ "Entra com a tua licença Piradex (validada online no PCC, com cache para trabalhar offline), com a senha beta (válida até 31/12/2026) ou com a senha master.\n\nManual completo: Docs/MANUAL.md. Para rever este guia, carrega no botão \"?\" no topo.\n\nBoa mistura!", "Sign in with your Piradex licence (validated online in the PCC, cached to work offline), with the beta password (valid until 31/12/2026) or with the master password.\n\nFull manual: Docs/MANUAL.md. To see this guide again, press the \"?\" button at the top.\n\nHappy mixing!" },
 { "Começar", "Start" },
 { "Seguinte", "Next" },
 { "MASKING", "MASKING" },
@@ -517,3 +517,4 @@
 { "Predefinição anterior", "Previous preset" },
 { "Predefinição seguinte", "Next preset" },
 { "Zero Latency: dinâmica a cada amostra, sem latência · Natural e Linear (FIR): fase mais limpa, mas as bandas dinâmicas atualizam ~25 vezes por segundo e a troca de modo demora ~100 ms. Para de-ess rápido use Zero Latency.", "Zero Latency: per-sample dynamics, no latency · Natural and Linear (FIR): cleaner phase, but dynamic bands update ~25 times per second and switching mode takes ~100 ms. For fast de-essing use Zero Latency." },
+{ "Tutorial e novidades", "Tutorial and what's new" },

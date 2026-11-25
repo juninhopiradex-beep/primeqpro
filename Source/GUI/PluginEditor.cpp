@@ -33,11 +33,11 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     addChildComponent (guide); guide.onClose = [] { AccessManager::get().setOnboardingSeen(); };
     addChildComponent (skinBtn); skinBtn.setButtonText (pqui::skinName (shownSkin)); skinBtn.setTooltip (juce::String (juce::CharPointer_UTF8 ("Cor / skin: Prime, Ouro, \xC3\x8D""ndigo (seguro para daltonismo)")));
     skinBtn.onClick = [this] { changeSkin ((pqui::skinIndex() + 1) % 3); };
-    for (auto* b : { &langPt, &langEn }) { addChildComponent (b); b->setClickingTogglesState (false); }
+    for (auto* b : { &langPt, &langEn, &langZh }) { addChildComponent (b); b->setClickingTogglesState (false); }
     addAndMakeVisible (cogBtn); cogBtn.setTooltip (pqui::T8 ("Opções")); cogBtn.onClick = [this] { optionsMenu(); };
     addAndMakeVisible (prevPreBtn); addAndMakeVisible (nextPreBtn); prevPreBtn.setTooltip (pqui::T8 ("Predefinição anterior")); nextPreBtn.setTooltip (pqui::T8 ("Predefinição seguinte"));
     prevPreBtn.onClick = [this] { stepPreset (-1); }; nextPreBtn.onClick = [this] { stepPreset (1); };
-    langPt.onClick = [this] { setLanguage (0); }; langEn.onClick = [this] { setLanguage (1); };
+    langPt.onClick = [this] { setLanguage (0); }; langEn.onClick = [this] { setLanguage (1); }; langZh.onClick = [this] { setLanguage (2); };
     addAndMakeVisible (helpBtn); helpBtn.setTooltip (pqui::T8 ("Guia rápido")); helpBtn.onClick = [this] { guide.open(); resized(); };
     addChildComponent (studio); addAndMakeVisible (studioBtn); studioBtn.setTooltip (juce::String (juce::CharPointer_UTF8 ("Alvo por g\xC3\xA9nero, Tradutor, Palavras, Cofre de decis\xC3\xB5""es e Ensino"))); studioBtn.onClick = [this] { showStudio (studioBtn.getToggleState()); };
     addChildComponent (abx); addAndMakeVisible (abxBtn); abxBtn.setTooltip ("Teste ABX cego: original vs processado, loudness igualado"); abxBtn.onClick = [this] { showAbx (abxBtn.getToggleState()); };
@@ -49,6 +49,7 @@ PrimeqEditor::PrimeqEditor (PrimeqProcessor& p)
     applyMode();
     captureLanguage(); pqui::i18n::forcePt() = false;
     pqui::i18n::lang() = AccessManager::get().language(); applyLanguage();
+    if (piradex::kit::Welcome::shouldShow ("primeq", JucePlugin_VersionString)) showWelcome();   // 1.0.2: 3 primeiras aberturas de cada versao
     setResizable (true, true); setResizeLimits (1100, 740, 2600, 1700);
     setSize (proc.uiWidth, proc.uiHeight);
     startTimerHz (30);
@@ -102,6 +103,7 @@ void PrimeqEditor::resized()
     graph.setBounds (r); map3d.setBounds (r); vmix.setBounds (r); if (map3d.isVisible()) map3d.toFront (false); if (vmix.isVisible()) vmix.toFront (false);
     abx.setBounds (r.getRight() - 470, r.getY() + 10, 460, 352); abx.toFront (false);
     login.setBounds (getLocalBounds()); guide.setBounds (getLocalBounds()); if (guide.isVisible()) guide.toFront (false); else if (login.isVisible()) login.toFront (false);
+    if (welcome != nullptr) { welcome->setBounds (getLocalBounds()); welcome->toFront (false); }
     proc.uiWidth = getWidth(); proc.uiHeight = getHeight();
 }
 
@@ -120,7 +122,7 @@ void PrimeqEditor::timerCallback()
 {
     AccessManager::get().checkExpiry();
     const bool unlocked = AccessManager::get().isUnlocked();
-    if (unlocked && ! login.isVisible() && ! guide.isVisible() && ! AccessManager::get().onboardingSeen()) { guide.open(); resized(); }
+    // 1.0.2: o guia rapido continua no botao "?"; o pop-up de tutorial e novidades aparece nas 3 primeiras aberturas de cada versao
     if (unlocked != wasUnlocked || lastSel < 0) { wasUnlocked = unlocked; login.setVisible (! unlocked); logoutBtn.setVisible (unlocked && ! AccessManager::inTrial()); login.toFront (false); repaint(); lastSel = 0; }
     if (! unlocked) return;
     graph.tick(); if (outMeter.isVisible()) outMeter.tick(); band.refresh(); strip.tick(); fx.tick(); if (fxWanted()) { bandDyn.refresh(); stripAn.tick(); fx2.tick(); } smart.tick(); if (mix.isVisible()) mix.tick();
@@ -136,14 +138,16 @@ void PrimeqEditor::stepPreset (int d)
 
 void PrimeqEditor::optionsMenu()
 {
-    using pqui::T8; juce::PopupMenu m; const bool en = pqui::i18n::lang().load() != 0; const int sk = pqui::skinIndex();
+    using pqui::T8; juce::PopupMenu m; const int sk = pqui::skinIndex();
     m.addSectionHeader (T8 ("Idioma"));
-    m.addItem (11, "PT", true, ! en); m.addItem (12, "EN", true, en);
+    const int lg = pqui::i18n::lang().load();
+    m.addItem (11, "PT", true, lg == 0); m.addItem (12, "EN", true, lg == 1); m.addItem (13, juce::String::fromUTF8 ("\xe4\xb8\xad\xe6\x96\x87"), true, lg == 2);
+    m.addSeparator(); m.addItem (41, T8 ("Tutorial e novidades")); m.addItem (42, T8 ("Guia r\xc3\xa1pido"));
     m.addSectionHeader (T8 ("Cor (skin)"));
     for (int i = 0; i < 3; ++i) m.addItem (21 + i, pqui::skinName (i), true, sk == i);
     if (logoutBtn.isVisible()) { m.addSeparator(); m.addItem (31, T8 ("Terminar sessão")); }
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (cogBtn), [this] (int r)
-    { if (r == 11) setLanguage (0); else if (r == 12) setLanguage (1); else if (r >= 21 && r <= 23) changeSkin (r - 21); else if (r == 31) logoutBtn.onClick(); });
+    { if (r == 11) setLanguage (0); else if (r == 12) setLanguage (1); else if (r == 13) setLanguage (2); else if (r == 41) showWelcome(); else if (r == 42) { guide.open(); resized(); } else if (r >= 21 && r <= 23) changeSkin (r - 21); else if (r == 31) logoutBtn.onClick(); });
 }
 
 void PrimeqEditor::presetMenu()
@@ -174,4 +178,26 @@ void PrimeqEditor::presetMenu()
                 if (res == 1) { const auto n = w->getTextEditorContents ("name").trim(); if (n.isNotEmpty()) { proc.saveUserPreset (n); presetName = n; presetBtn.setButtonText (n); } } }), true);
         }
     });
+}
+
+void PrimeqEditor::showWelcome()
+{
+    using W = piradex::kit::WelcomeItem;
+    welcome = std::make_unique<piradex::kit::Welcome> ("PrimEQ Pro", pqui::kTeal, JucePlugin_VersionString, std::vector<W> {
+        W { "24 bandas param\xc3\xa9tricas e din\xc3\xa2micas", "24 parametric and dynamic bands",
+            "Duplo clique no gr\xc3\xa1" "fico cria uma banda; cada banda pode ser din\xc3\xa2mica, com detetor da pista ou do sidechain.",
+            "Double-click the graph to create a band; each band can be dynamic, with a track or sidechain detector." },
+        W { "Smart e Mix", "Smart and Mix",
+            "SMART aprende o material e prop\xc3\xb5" "e bandas; MIX mostra todas as inst\xc3\xa2ncias e onde as faixas se tapam.",
+            "SMART learns the material and proposes bands; MIX shows every instance and where tracks mask each other." },
+        W { "Modos Simple / Advanced / Expert", "Simple / Advanced / Expert modes",
+            "Comece no Simple; EXPERT abre a gaveta com De-harsh, car\xc3\xa1" "cter, fase e relat\xc3\xb3rio. O bot\xc3\xa3o ? abre o guia r\xc3\xa1pido.",
+            "Start in Simple; EXPERT opens the drawer with De-harsh, character, phase and report. The ? button opens the quick guide." },
+        W { "Novo na 1.0.2", "New in 1.0.2",
+            "Idioma PT / EN / ZH na roda dentada, ecr\xc3\xa3 de login Piradex unificado e este pop-up nas 3 primeiras aberturas de cada vers\xc3\xa3o.",
+            "PT / EN / ZH language in the gear menu, the unified Piradex login screen and this pop-up on the first 3 opens of each version." } });
+    welcome->onClose = [safe = juce::Component::SafePointer<PrimeqEditor> (this)] { if (safe != nullptr) juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->welcome.reset(); }); };
+    addAndMakeVisible (*welcome);
+    welcome->setBounds (getLocalBounds());
+    welcome->toFront (true);
 }

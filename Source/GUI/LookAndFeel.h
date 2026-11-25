@@ -2,6 +2,7 @@
 //  PrimEQ Pro by Piradex — identidade visual: grafite mate, teal discreto, curvas de banda subtis
 // =============================================================================
 #pragma once
+#include "i18n/PiradexLanguage.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_graphics/juce_graphics.h>
 #include <algorithm>
@@ -56,9 +57,10 @@ inline juce::Font fontOf (float h, bool bold = false) { return juce::Font (juce:
 // --- i18n PT/EN: o texto-fonte esta em PT; em EN procura-se no dicionario (I18nEn.inc). Textos sem entrada ficam como estao. ---
 namespace i18n
 {
-    inline std::atomic<int>& lang() { static std::atomic<int> l { 0 }; return l; }          // 0 = PT, 1 = EN
+    inline std::atomic<int>& lang() { static std::atomic<int> l { 0 }; return l; }          // 0 = PT, 1 = EN, 2 = ZH (1.0.2)
     inline bool& forcePt() { thread_local bool f = false; return f; }                       // usado durante a construcao do editor
     inline bool isEn() { return ! forcePt() && lang().load() == 1; }
+    inline bool isZh() { return ! forcePt() && lang().load() == 2; }
     inline const char* lookup (const std::string& pt)
     {
         static const std::unordered_map<std::string, const char*> m = []
@@ -75,11 +77,13 @@ namespace i18n
 }
 inline juce::String T8 (const char* s)
 {
+    if (i18n::isZh()) return piradex::i18n::trPt (s);                                        // ZH: tabela ZhTable (chave = PT)
     if (i18n::isEn()) if (const char* e = i18n::lookup (s)) return juce::String (juce::CharPointer_UTF8 (e));
     return juce::String (juce::CharPointer_UTF8 (s));
 }
 inline juce::String tr (const juce::String& s)
 {
+    if (i18n::isZh()) return piradex::i18n::trPt (s.toRawUTF8());
     if (i18n::isEn()) if (const char* e = i18n::lookup (s.toStdString())) return juce::String (juce::CharPointer_UTF8 (e));
     return s;
 }

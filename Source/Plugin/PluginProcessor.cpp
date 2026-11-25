@@ -1,3 +1,4 @@
+#include "../GUI/i18n/PiradexLanguage.h"
 #include "PluginProcessor.h"
 #include "FactoryPresets.h"
 #include "../GUI/PluginEditor.h"
@@ -97,6 +98,7 @@ PrimeqProcessor::PrimeqProcessor()
                                        .withInput ("Sidechain", juce::AudioChannelSet::stereo(), false)),
       apvts (*this, &undo, "PRIMEQ", createLayout())
 {
+    piradex::i18n::registerPluginTable();
     for (int b = 0; b < kNumBands; ++b)
     {
         auto g = [&] (const char* k) { return apvts.getRawParameterValue (juce::String (bid (b, k))); };

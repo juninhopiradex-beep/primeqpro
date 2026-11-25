@@ -2,6 +2,7 @@
 //  PrimEQ Pro by Piradex — editor: cabecalho, grafico, inspector de banda, tira global, Smart Ops, login
 // =============================================================================
 #pragma once
+#include "i18n/PiradexKitUI.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "LookAndFeel.h"
 #include "EqGraph.h"
@@ -657,44 +658,25 @@ private:
 };
 
 // ------------------------------------------------------------------------------------------ login
+// 1.0.2: ecra de login unico Piradex (kit partilhado)
 class LoginOverlay : public juce::Component
 {
 public:
     explicit LoginOverlay (std::function<void()> onSuccess) : onOk (std::move (onSuccess))
     {
-        using namespace pqui;
-        pw.setPasswordCharacter ((juce::juce_wchar) 0x2022); pw.setTextToShowWhenEmpty (T8 ("Senha de acesso"), kDim); pw.setJustification (juce::Justification::centred);
-        pw.setFont (fontOf (16.f)); pw.onReturnKey = [this] { submit(); };
-        remember.setToggleState (true, juce::dontSendNotification); remember.setButtonText (T8 ("Lembrar neste computador"));
-        enter.setButtonText (T8 ("Entrar")); enter.onClick = [this] { submit(); };
-        msg.setJustificationType (juce::Justification::centred); msg.setFont (fontOf (12.f)); msg.setColour (juce::Label::textColourId, kRed);
-        addAndMakeVisible (pw); addAndMakeVisible (remember); addAndMakeVisible (enter); addAndMakeVisible (msg);
+        screen.onSubmit = [this] (const juce::String& p, bool rem) { submit (p, rem); };
+        addAndMakeVisible (screen);
     }
-    void refreshLanguage() { pw.setTextToShowWhenEmpty (T8 ("Senha de acesso"), pqui::kDim); enter.setButtonText (T8 ("Entrar")); remember.setButtonText (T8 ("Lembrar neste computador")); msg.setText ({}, juce::dontSendNotification); repaint(); }
-    void resized() override
-    {
-        auto r = getLocalBounds().withSizeKeepingCentre (380, 300).reduced (30, 0);
-        pw.setBounds (r.getX(), r.getY() + 110, r.getWidth(), 40); remember.setBounds (r.getX(), r.getY() + 160, r.getWidth(), 28);
-        enter.setBounds (r.getX(), r.getY() + 196, r.getWidth(), 40); msg.setBounds (r.getX() - 20, r.getY() + 242, r.getWidth() + 40, 20);
-    }
-    void paint (juce::Graphics& g) override
-    {
-        using namespace pqui;
-        g.fillAll (kBg.withAlpha (0.97f));
-        auto card = getLocalBounds().withSizeKeepingCentre (380, 300).toFloat();
-        g.setColour (kPanel); g.fillRoundedRectangle (card, 18.f); g.setColour (kLine); g.drawRoundedRectangle (card.reduced (0.5f), 18.f, 1.f);
-        g.setGradientFill (juce::ColourGradient (kTeal, card.getX(), card.getY(), juce::Colour (0xffe6e9ec), card.getRight(), card.getY(), false));
-        g.setFont (fontOf (34.f, true)); g.drawText ("PrimEQ Pro", card.withTrimmedTop (28.f).withHeight (46.f).toNearestInt(), juce::Justification::centred);
-        g.setColour (kDim); g.setFont (fontOf (12.f)); g.drawText (T8 ("by Piradex  ·  Parametric + Dynamic EQ"), card.withTrimmedTop (76.f).withHeight (18.f).toNearestInt(), juce::Justification::centred);
-    }
+    void refreshLanguage() { screen.repaint(); }
+    void resized() override { screen.setBounds (getLocalBounds()); }
+    void visibilityChanged() override { if (isVisible() && isShowing()) screen.focusField(); }
+    void mouseDown (const juce::MouseEvent&) override {}
 private:
-    void submit()
+    void submit (const juce::String& pass, bool rem)
     {
-        if (busy) return;
-        const juce::String pass = pw.getText();
-        if (pass.trim().isEmpty()) { msg.setText (T8 ("Escreva a senha."), juce::dontSendNotification); return; }
-        busy = true; enter.setEnabled (false); msg.setColour (juce::Label::textColourId, pqui::kDim); msg.setText (T8 ("A verificar..."), juce::dontSendNotification);
-        const bool rem = remember.getToggleState(); juce::Component::SafePointer<LoginOverlay> safe (this);
+        if (busy || pass.trim().isEmpty()) return;
+        busy = true; screen.setBusy (true);
+        juce::Component::SafePointer<LoginOverlay> safe (this);
         juce::Thread::launch ([safe, pass, rem]
         {
             const auto m = AccessManager::matchPassword (pass);   // PBKDF2 fora da thread de mensagens
@@ -703,19 +685,23 @@ private:
             juce::MessageManager::callAsync ([safe, m, rem, po, pmsg]
             {
                 if (safe == nullptr) return;
-                safe->busy = false; safe->enter.setEnabled (true); safe->msg.setColour (juce::Label::textColourId, pqui::kRed);
-                if (po == AccessManager::PccOutcome::Ok) { safe->pw.clear(); safe->msg.setText ({}, juce::dontSendNotification); if (safe->onOk) safe->onOk(); return; }
-                if (po == AccessManager::PccOutcome::Unreachable) { safe->msg.setText (pqui::T8 ("Sem ligação ao servidor de licenças. Verifique a internet."), juce::dontSendNotification); return; }
-                if (po == AccessManager::PccOutcome::BadReply)    { safe->msg.setText (pqui::T8 ("Resposta do servidor não reconhecida."), juce::dontSendNotification); return; }
-                if (po == AccessManager::PccOutcome::Invalid)     { safe->msg.setText (pmsg.isNotEmpty() ? pmsg : pqui::T8 ("Licença inválida, expirada ou desativada."), juce::dontSendNotification); return; }
+                safe->busy = false; safe->screen.setBusy (false);
+                auto ok = [safe] { safe->screen.clearField(); safe->screen.setStatus ({}, false); if (safe->onOk) safe->onOk(); };
+                auto err = [safe] (const juce::String& t) { safe->screen.setStatus (t, true); };
+                if (po == AccessManager::PccOutcome::Ok) { ok(); return; }
+                if (po == AccessManager::PccOutcome::Unreachable) { err (pqui::T8 ("Sem liga\xc3\xa7\xc3\xa3o ao servidor de licen\xc3\xa7" "as. Verifique a internet.")); return; }
+                if (po == AccessManager::PccOutcome::BadReply)    { err (pqui::T8 ("Resposta do servidor n\xc3\xa3o reconhecida.")); return; }
+                if (po == AccessManager::PccOutcome::Invalid)     { err (pmsg.isNotEmpty() ? pmsg : pqui::T8 ("Licen\xc3\xa7" "a inv\xc3\xa1lida, expirada ou desativada.")); return; }
                 const auto res = AccessManager::get().applyLogin (m, rem);
-                if (res == AccessManager::LoginResult::Ok) { safe->pw.clear(); safe->msg.setText ({}, juce::dontSendNotification); if (safe->onOk) safe->onOk(); }
-                else if (res == AccessManager::LoginResult::Expired) safe->msg.setText (pqui::T8 ("Esta senha beta já expirou."), juce::dontSendNotification);
-                else safe->msg.setText (T8 ("Senha incorreta."), juce::dontSendNotification);
+                if (res == AccessManager::LoginResult::Ok) ok();
+                else if (res == AccessManager::LoginResult::Expired) err (pqui::T8 ("Esta senha beta j\xc3\xa1 expirou."));
+                else err (pqui::T8 ("Senha incorreta."));
             });
         });
     }
-    std::function<void()> onOk; juce::TextEditor pw; juce::ToggleButton remember; juce::TextButton enter; juce::Label msg; bool busy = false;
+    std::function<void()> onOk;
+    piradex::kit::LoginScreen screen { "PrimEQ Pro", pqui::kTeal, JucePlugin_VersionString };
+    bool busy = false;
 };
 
 // ------------------------------------------------------------------------------------------ editor
@@ -772,6 +758,7 @@ public:
 private:
     void timerCallback() override;
     void applyMode();
+    void showWelcome();
     // --- idioma (PT/EN): o texto-fonte e PT; guarda-se o PT de cada rotulo/tooltip e re-traduz ao mudar ---
     struct PtGuard { PtGuard() { pqui::i18n::forcePt() = true; } };
     static void captureRec (juce::Component& c)
@@ -794,7 +781,7 @@ private:
     {
         applyRec (*this); abx.relabel(); studio.refreshLanguage();
         abBtn.setButtonText (proc.abSlot() == 0 ? "A" : "B"); presetBtn.setButtonText (presetName);
-        { const bool en = pqui::i18n::lang().load() != 0; langPt.setToggleState (! en, juce::dontSendNotification); langEn.setToggleState (en, juce::dontSendNotification); langPt.setTooltip (en ? "Português" : "Idioma: Português"); langEn.setTooltip (en ? "Language: English" : "English"); }
+        { const int lg = pqui::i18n::lang().load(); langPt.setToggleState (lg == 0, juce::dontSendNotification); langEn.setToggleState (lg == 1, juce::dontSendNotification); langZh.setToggleState (lg == 2, juce::dontSendNotification); }
         mix.relabel(); login.refreshLanguage(); smart.refreshLanguage(); timerCallback(); repaint();
     }
     void setLanguage (int l) { pqui::i18n::lang() = l; AccessManager::get().setLanguage (l); applyLanguage(); }
@@ -810,8 +797,8 @@ private:
     int shownSkin = pqui::skinIndex();
     PtGuard ptGuard;   // PRIMEIRO membro: forca PT durante a construcao para capturar os textos-fonte
     PrimeqProcessor& proc; pqui::Lnf lnf;
-    EqGraph graph; BandPanel band, bandDyn; GlobalStrip strip, stripAn; FxPanel fx, fx2; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; pqui::MixMap3D map3d; pqui::VisualMixer vmix; LoginOverlay login; OnboardingOverlay guide;
-    juce::TextButton langPt { "PT" }, langEn { "EN" }, skinBtn { "PRIME" }; juce::ToggleButton expertBtn { "EXPERT" }; LevelMeter outMeter;
+    EqGraph graph; BandPanel band, bandDyn; GlobalStrip strip, stripAn; FxPanel fx, fx2; SmartPanel smart; MixPanel mix; AbxPanel abx; StudioPanel studio; pqui::MixMap3D map3d; pqui::VisualMixer vmix; LoginOverlay login; OnboardingOverlay guide; std::unique_ptr<piradex::kit::Welcome> welcome;
+    juce::TextButton langPt { "PT" }, langEn { "EN" }, langZh { juce::String::fromUTF8 ("\xe4\xb8\xad\xe6\x96\x87") }, skinBtn { "PRIME" }; juce::ToggleButton expertBtn { "EXPERT" }; LevelMeter outMeter;
     juce::TextButton cogBtn { juce::String (juce::CharPointer_UTF8 ("\xE2\x9A\x99")) }, prevPreBtn { "<" }, nextPreBtn { ">" }, presetBtn { "Presets" }, undoBtn { "Undo" }, redoBtn { "Redo" }, abBtn { "A" }, logoutBtn { "Sair" };
     juce::ToggleButton bypassBtn { "BYPASS" }, smartBtn { "SMART OPS" }, mixBtn { "ASSISTENTE" }, studioBtn { "STUDIO" }, zonesBtn { "CONFLITOS" }, mapBtn { "MAPA 3D" }, vmixBtn { "MIXER" }, collBtn { "OUTRAS PISTAS" }, abxBtn { "ABX" }, helpBtn { "?" }; juce::ComboBox phaseBox; juce::Label phaseLbl;
     std::unique_ptr<ComboAtt> aPhase; std::unique_ptr<ButtonAtt> aBypass;
